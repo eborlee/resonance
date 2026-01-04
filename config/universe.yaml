@@ -1,10 +1,10 @@
 # 监控的币种及其纳入考量的时间窗口
 symbols:
-  BTCUSDT.P:
+  BTCUSDT:
+    intervals: [4h, 1h, 15m, 5m, 3m,30s]
+
+  ETHUSDT:
     intervals: [4h, 1h, 15m, 5m, 3m]
 
-  ETHUSDT.P:
-    intervals: [4h, 1h, 15m, 5m, 3m]
-
-  SOLUSDT.P:
+  SOLUSDT:
     intervals: [4h, 1h, 15m, 5m, 3m]

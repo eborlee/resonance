@@ -1,0 +1,15 @@
+# 规则：组合中最大周期（max_interval）落在哪个 topic
+# key 是周期字符串，value 是一个“topic 名称”，对应 .env 里的具体 topic id
+max_interval_to_topic:
+  1w: long
+  1d: mid
+  4h: short
+  1h: ultra
+
+# 组合有效范围：当组合最大周期为 key 时，允许参与共振的最小周期下限
+# 小于这个下限的周期（更快）即使 IN，也会被忽略（不计数、不展示、不影响推送）
+max_interval_min_allowed:
+  1w: 1h
+  1d: 15m
+  4h: 3m
+  1h: 30s
