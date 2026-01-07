@@ -1,119 +1,189 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Dict, Tuple, Optional
 import time
+from typing import Dict, Tuple, Optional
+from dataclasses import dataclass
+from typing import Any, Dict, Tuple, List, Optional
+from collections import defaultdict
 
 from ..domain.models import Side
 
 
+# =========================
+# 每个 interval 的缓存结构
+# =========================
 @dataclass
 class IntervalCache:
-    # 最新指标值（例如你示例里的 value）
-    value: float
-    updated_ts: float
+    value: float                            # 最新值
+    updated_ts: float                       # 最新更新时间戳
 
-    # 余温计数（仅用于展示，不触发推送）
-    warm_ttl_oversold: int = 0
-    warm_ttl_overbought: int = 0
+    in_oversold: bool = False               # 当前是否在超卖区（用于判断是否刚刚退出）
+    in_overbought: bool = False             # 当前是否在超买区
 
-    # 上一次是否在IN（用于保证：不会出现 OUT->WARM）
-    prev_in_oversold: bool = False
-    prev_in_overbought: bool = False
+    last_exit_ts_oversold: Optional[float] = None  # 最近一次离开超卖的时间
+    last_exit_ts_overbought: Optional[float] = None  # 最近一次离开超买的时间
 
 
+# =========================
+# 推送门控记录
+# =========================
 @dataclass
 class GateRecord:
     last_in_count: int = 0
     last_sent_ts: float = 0.0
 
 
+# =========================
+# AppState 主体
+# =========================
 class AppState:
     """
-    最小可运行状态：
-    1) cache：symbol+interval -> 最新 value + warm余温
-    2) gate ：symbol+side     -> 上次IN数量 + 上次推送时间
+    全局运行状态（timestamp-based warm 版本）
+
+    职责：
+    - 追踪每个周期是否处于 IN / WARM / OUT
+    - 提供事件驱动式的推送门控
     """
-    def __init__(self, cooldown_seconds: int, warm_lookback: int):
+
+    def __init__(
+        self,
+        cooldown_seconds: int,
+        warm_k_map: Dict[str, int],
+        interval_seconds: Dict[str, int],
+    ):
         self.cooldown_seconds = float(cooldown_seconds)
-        self.warm_lookback = int(warm_lookback)
+        self.warm_k_map = warm_k_map  # 每个周期允许几根K线 warm
+        self.interval_seconds = interval_seconds  # 每个周期一根K线多少秒
 
         self.cache: Dict[Tuple[str, str], IntervalCache] = {}
         self.gate: Dict[Tuple[str, str], GateRecord] = {}
 
-    def update_interval(self, symbol: str, interval: str, value: float,
-                        ob_level: float, os_level: float) -> None:
+        self.latest_combo_state: Dict[
+            Tuple[str, Side],
+            Dict[Tuple[str, ...], Dict[str, Any]]
+        ] = defaultdict(dict)
         """
-        更新单个 (symbol, interval) 的最新 value，并维护余温 TTL。
-        余温规则（符合你说的“不会有 OUT->WARM”）：
-        - 只有 prev_in=True 且 本次不再IN 时，才进入 WARM（ttl=warm_lookback）
-        - 如果 prev_in=False，本次不IN，则保持 OUT（ttl不被置起）
+        self.latest_combo_state[(symbol, side)][("4h", "1h")] = {
+            "active": True,
+            "last_pushed_ts": 1700001234.0,
+            "max_iv": "4h",
+        }
         """
-        now_ts = time.time()
+
+    # =========================================================
+    # 更新某个周期的状态，同时记录“是否刚离开 IN”
+    # =========================================================
+    def update_interval(
+        self,
+        symbol: str,
+        interval: str,
+        value: float,
+        ob_level: float,
+        os_level: float,
+        now_ts: Optional[float] = None,
+    ) -> None:
+        """
+        主要职责：
+        - 更新最新值
+        - 判断是否刚刚离开 IN，若是，则记录 exit_ts
+        """
+        if now_ts is None:
+            now_ts = time.time()
+
         key = (symbol, interval)
         rec = self.cache.get(key)
+
         if rec is None:
-            rec = IntervalCache(value=float(value), updated_ts=now_ts)
+            rec = IntervalCache(value=value, updated_ts=now_ts)
             self.cache[key] = rec
         else:
-            rec.value = float(value)
+            rec.value = value
             rec.updated_ts = now_ts
 
-        # oversold 判定
+        # ========= 超卖处理 =========
+        was_in_os = rec.in_oversold
         is_in_os = (value <= os_level)
-        if is_in_os:
-            rec.prev_in_oversold = True
-            rec.warm_ttl_oversold = 0
-        else:
-            if rec.prev_in_oversold:
-                # 刚从IN退出 -> 进入余温
-                rec.warm_ttl_oversold = self.warm_lookback if rec.warm_ttl_oversold == 0 else rec.warm_ttl_oversold
-                rec.prev_in_oversold = False
-            else:
-                # 从未IN过，不允许 OUT->WARM
-                rec.warm_ttl_oversold = 0
 
-        # overbought 判定
+        if was_in_os and not is_in_os:
+            rec.last_exit_ts_oversold = now_ts
+
+        rec.in_oversold = is_in_os
+
+        # ========= 超买处理 =========
+        was_in_ob = rec.in_overbought
         is_in_ob = (value >= ob_level)
-        if is_in_ob:
-            rec.prev_in_overbought = True
-            rec.warm_ttl_overbought = 0
-        else:
-            if rec.prev_in_overbought:
-                rec.warm_ttl_overbought = self.warm_lookback if rec.warm_ttl_overbought == 0 else rec.warm_ttl_overbought
-                rec.prev_in_overbought = False
-            else:
-                rec.warm_ttl_overbought = 0
 
-    def tick_warm_ttl(self, symbol: str, interval: str, side: Side) -> None:
+        if was_in_ob and not is_in_ob:
+            rec.last_exit_ts_overbought = now_ts
+
+        rec.in_overbought = is_in_ob
+
+    # =========================================================
+    # 判断 warm 状态（基于时间差）
+    # =========================================================
+    def is_warm(
+        self,
+        symbol: str,
+        interval: str,
+        side: Side,
+        now_ts: Optional[float] = None,
+    ) -> bool:
         """
-        每次该 interval 收到新事件、且当前不在IN时，余温 TTL 递减（用于展示）。
-        这是“事件驱动”的近似：足够最小可运行。
+        判断某个周期是否仍处于 warm 状态
+
+        判断逻辑：
+        - 必须曾进入过 IN
+        - 必须记录了退出 IN 的时间
+        - 退出时间在 warm 窗口内
         """
+        if now_ts is None:
+            now_ts = time.time()
+
         rec = self.cache.get((symbol, interval))
         if rec is None:
-            return
-        if side == Side.OVERSOLD and rec.warm_ttl_oversold > 0:
-            rec.warm_ttl_oversold -= 1
-        if side == Side.OVERBOUGHT and rec.warm_ttl_overbought > 0:
-            rec.warm_ttl_overbought -= 1
+            return False
 
-    def should_emit_resonance(self, symbol: str, side: Side, in_count: int,
-                             min_resonance: int) -> bool:
+        if side == Side.OVERSOLD:
+            exit_ts = rec.last_exit_ts_oversold
+        else:
+            exit_ts = rec.last_exit_ts_overbought
+
+        if exit_ts is None:
+            return False
+
+        candle_sec = self.interval_seconds.get(interval)
+        warm_k = self.warm_k_map.get(interval, 2) # 获取这个周期允许 warm 的 K线根数（默认是2根）
+
+        # 防御性代码：如果没有配好周期秒数（极少发生），就直接认为 不在 warm 状态
+        if candle_sec is None:
+            return False
+
+        return (now_ts - exit_ts) <= warm_k * candle_sec
+
+    # =========================================================
+    # 推送门控（与 warm 无关，无需改）
+    # =========================================================
+    def should_emit_resonance(
+        self,
+        symbol: str,
+        side: Side,
+        in_count: int,
+        min_resonance: int,
+    ) -> bool:
         """
-        推送门控（你要的最简单版本）：
-        - 仅当 in_count >= min_resonance 且 in_count 相比上次增加 才推
-        - IN->WARM / 降级 不推
-        - cooldown 仅用于防抖（可保留）
+        推送策略：
+        - 当前有效 IN 数 >= 门槛
+        - 比上一次更多（只推增强）
+        - 不在 cooldown 内
         """
         key = (symbol, side.value)
         now_ts = time.time()
+
         rec = self.gate.get(key)
         if rec is None:
             rec = GateRecord()
             self.gate[key] = rec
 
-        # 未达到共振门槛：更新 last_in_count 但不推
         if in_count < min_resonance:
             rec.last_in_count = in_count
             return False
@@ -126,6 +196,5 @@ class AppState:
             rec.last_sent_ts = now_ts
             return True
 
-        # 即使没推，也要更新 last_in_count，保证下一次“增加”能正确判断
         rec.last_in_count = in_count
         return False

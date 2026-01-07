@@ -39,6 +39,16 @@ class Settings(BaseSettings):
     LOG_MAX_BYTES: int = 10 * 1024 * 1024
     LOG_BACKUP_COUNT: int = 5
 
+    INTERVAL_ORDER = [
+
+
+        
+        
+        
+        
+        "30s",  "3m", "5m", "15m", "1h", "4h","1d","1w"
+    ]
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

@@ -3,7 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Tuple
 import time
+"""
+=====================
 
+废弃
+
+=====================
+"""
 
 @dataclass
 class GateRecord:
