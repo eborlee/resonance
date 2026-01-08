@@ -76,7 +76,7 @@ class ResonanceService:
             return
 
         # Step 2️⃣：更新状态缓存（AppState），记录最新值和 IN 状态转换
-        intervals_updated = set()
+        # intervals_updated = set()
         for sig in event2.signals:
             interval = sig.interval
             value = float(sig.values[0])
@@ -88,7 +88,7 @@ class ResonanceService:
                 os_level=settings.OS_LEVEL,
                 now_ts=event2.ts,  # 使用事件时间戳记录退出时间
             )
-            intervals_updated.add(interval)
+            # intervals_updated.add(interval)
 
         allowed_intervals = universe.get(event2.symbol, [])
         if not allowed_intervals:
@@ -108,14 +108,18 @@ class ResonanceService:
                     v = rec.value
                     if rec.in_oversold if side == Side.OVERSOLD else rec.in_overbought:
                         st = LevelState.IN
+                    # 此处event2.ts就是推送时间，即k线收盘时间
                     elif self.state.is_warm(event2.symbol, iv, side, now_ts=event2.ts):
                         st = LevelState.WARM
                     else:
                         st = LevelState.OUT
                 states[iv] = IntervalState(interval=iv, state=st, value=v)
 
-            # Step 3.2：提取所有处于 IN 状态的周期
-            raw_in_intervals = [iv for iv, st in states.items() if st.state == LevelState.IN]
+            # Step 3.2：提取所有处于 IN/WARM 状态的周期
+            raw_in_intervals = [
+                iv for iv, st in states.items()
+                if st.state in (LevelState.IN, LevelState.WARM)
+            ]
             if not raw_in_intervals:
                 # 没有任何有效 IN，也要更新共振口径（防止“悬空”）
                 self.state.should_emit_resonance(

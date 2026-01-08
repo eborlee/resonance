@@ -104,6 +104,7 @@ class AppState:
         was_in_os = rec.in_oversold
         is_in_os = (value <= os_level)
 
+        # 如果之前在区，现在不在超卖区，则用现在的ts设为退出超卖的ts
         if was_in_os and not is_in_os:
             rec.last_exit_ts_oversold = now_ts
 

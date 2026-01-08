@@ -6,12 +6,34 @@ import re
 
 from ..domain.models import IntervalSignal, TvEvent
 
+from datetime import datetime, timezone
+
+def parse_ts(v: Any) -> float:
+    if v is None:
+        return time.time()
+
+    # 已经是 timestamp
+    if isinstance(v, (int, float)):
+        return float(v)
+
+    # TradingView / ISO-8601 字符串
+    if isinstance(v, str):
+        # 处理 Z（UTC）
+        if v.endswith("Z"):
+            dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
+        else:
+            dt = datetime.fromisoformat(v)
+        return dt.timestamp()
+
+    return time.time()
+
 
 # TradingView interval 常见映射：
 # - 你示例里 interval="60" 表示 60分钟 -> 1h
 # - 也可能出现 "240" (4h), "15" (15m) 等
 # - 有的脚本会用 "D"/"W" 表示日/周
 INTERVAL_MAP: Dict[str, str] = {
+
     # minutes
     "1": "1m",
     "3": "3m",
@@ -36,6 +58,19 @@ INTERVAL_MAP: Dict[str, str] = {
     "W": "1w",
     "1W": "1w",
 }
+
+INTERVAL_SECONDS = {
+    "30s": 30,
+    "1m": 60,
+    "3m": 180,
+    "5m": 300,
+    "15m": 900,
+    "1h": 3600,
+    "4h": 14400,
+    "1d": 86400,
+    "1w": 604800
+}
+
 
 
 def normalize_symbol(raw: str) -> str:
@@ -115,10 +150,20 @@ def parse_tv_payload(payload: Dict[str, Any]) -> TvEvent:
     raw_symbol = payload.get("symbol") or payload.get("ticker") or "UNKNOWN"
     symbol = normalize_symbol(str(raw_symbol))
 
-    ts = float(payload.get("ts") or time.time())
+    # ts = float(payload.get("ts") or time.time())
+    ts = float(
+        payload.get("timenow")
+        or payload.get("ts")
+        or time.time()
+    )
+
 
     interval = map_interval(payload.get("interval"))
     value = parse_value(payload.get("value"))
+
+    bar_open_ts = payload.get("time")
+    bar_open_ts = float(bar_open_ts) if bar_open_ts is not None else None
+
 
     signals: List[IntervalSignal] = []
 

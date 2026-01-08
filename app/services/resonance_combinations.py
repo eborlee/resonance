@@ -9,6 +9,9 @@ ALLOWED_COMBINATIONS = [
     ("1h", "15m"),
     ("15m", "3m"),
     ("4h", "1h", "15m"),
+    ("1d", "4h", "1h"),
+    ("1d", "4h"),
+    ("1d", "1h"),
 ]
 
 COMBINATION_ROUTING = {
