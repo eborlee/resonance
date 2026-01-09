@@ -57,7 +57,7 @@ def test_config_loading_success(monkeypatch, tmp_path: Path):
         """
 symbols:
   BTCUSDT:
-    intervals: ["1w", "1d", "4h", "1h", "15m", "3m"]
+    intervals: ["1w", "1D", "4h", "1h", "15m", "3m"]
   ASTERUSDT:
     intervals: ["4h", "1h", "15m", "3m"]
 """.lstrip(),
@@ -69,13 +69,13 @@ symbols:
         """
 max_interval_to_topic:
   1w: long
-  1d: mid
+  1D: mid
   4h: short
   1h: ultra
 
 max_interval_min_allowed:
   1w: 1h
-  1d: 15m
+  1D: 15m
   4h: 3m
   1h: 30s
 """.lstrip(),
@@ -94,7 +94,7 @@ max_interval_min_allowed:
 
     # universe
     assert "BTCUSDT" in cfg.universe
-    assert cfg.universe["BTCUSDT"] == ["1w", "1d", "4h", "1h", "15m", "3m"]
+    assert cfg.universe["BTCUSDT"] == ["1w", "1D", "4h", "1h", "15m", "3m"]
 
     # routing
     assert cfg.routing_rules["max_interval_to_topic"]["1w"] == "long"
@@ -126,7 +126,7 @@ def test_config_missing_env_required_field_fail(monkeypatch, tmp_path: Path):
         """
 symbols:
   BTCUSDT:
-    intervals: ["1w", "1d"]
+    intervals: ["1w", "1D"]
 """.lstrip(),
     )
 
@@ -257,7 +257,7 @@ def test_routing_missing_required_mapping_fail(monkeypatch, tmp_path: Path):
         """
 symbols:
   BTCUSDT:
-    intervals: ["1w", "1d"]
+    intervals: ["1w", "1D"]
 """.lstrip(),
     )
 

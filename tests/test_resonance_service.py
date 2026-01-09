@@ -27,10 +27,10 @@ async def test_resonance_trigger_push(monkeypatch):
     # ✅ monkeypatch config 中的 universe 与 routing_rules
     monkeypatch.setitem(__import__("app.config").config.universe, "BTCUSDT", ["1h", "4h"])
     monkeypatch.setitem(__import__("app.config").config.routing_rules, "max_interval_min_allowed", {
-        "1w": "1h", "1d": "15m", "4h": "3m", "1h": "30s"
+        "1w": "1h", "1D": "15m", "4h": "3m", "1h": "30s"
     })
     monkeypatch.setitem(__import__("app.config").config.routing_rules, "max_interval_to_topic", {
-        "1w": "long", "1d": "mid", "4h": "short", "1h": "ultra"
+        "1w": "long", "1D": "mid", "4h": "short", "1h": "ultra"
     })
 
     # ✅ 构造 mock tg client
@@ -71,10 +71,10 @@ async def test_resonance_continuous_behavior(monkeypatch):
     # patch config
     monkeypatch.setitem(__import__("app.config").config.universe, "BTCUSDT", ["1h", "4h", "15m","3m","30s"])
     monkeypatch.setitem(__import__("app.config").config.routing_rules, "max_interval_min_allowed", {
-        "1w": "1h", "1d": "15m", "4h": "3m", "1h": "30s"
+        "1w": "1h", "1D": "15m", "4h": "3m", "1h": "30s"
     })
     monkeypatch.setitem(__import__("app.config").config.routing_rules, "max_interval_to_topic", {
-        "1w": "long", "1d": "mid", "4h": "short", "1h": "ultra"
+        "1w": "long", "1D": "mid", "4h": "short", "1h": "ultra"
     })
 
     # 构造共用组件

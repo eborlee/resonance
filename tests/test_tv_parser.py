@@ -9,7 +9,7 @@ from app.domain.models import IntervalSignal, TvEvent
     ("5", "5m"),
     ("60", "1h"),
     ("240", "4h"),
-    ("D", "1d"),
+    ("D", "1D"),
     ("1W", "1w"),
     ("1h", "1h"),
     ("15m", "15m"),

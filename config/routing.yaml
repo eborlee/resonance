@@ -2,7 +2,7 @@
 # key 是周期字符串，value 是一个“topic 名称”，对应 .env 里的具体 topic id
 max_interval_to_topic:
   1w: long
-  1d: mid
+  1D: mid
   4h: short
   1h: ultra
 
@@ -10,6 +10,6 @@ max_interval_to_topic:
 # 小于这个下限的周期（更快）即使 IN，也会被忽略（不计数、不展示、不影响推送）
 max_interval_min_allowed:
   1w: 1h
-  1d: 15m
+  1D: 15m
   4h: 3m
   1h: 30s

@@ -5,9 +5,11 @@ from typing import Dict, Tuple, Optional
 from dataclasses import dataclass
 from typing import Any, Dict, Tuple, List, Optional
 from collections import defaultdict
-
+from ..config import settings
 from ..domain.models import Side
 
+import logging
+logger = logging.getLogger(__name__)
 
 # =========================
 # 每个 interval 的缓存结构
@@ -178,7 +180,7 @@ class AppState:
         - 不在 cooldown 内
         """
         key = (symbol, side.value)
-        now_ts = time.time()
+        now_ts = time.time() #TODO 这个时间要替换ts
 
         rec = self.gate.get(key)
         if rec is None:
@@ -187,6 +189,7 @@ class AppState:
 
         if in_count < min_resonance:
             rec.last_in_count = in_count
+            logger.info(f"共振数量{rec.last_in_count}少于要求")
             return False
 
         increased = (in_count > rec.last_in_count)

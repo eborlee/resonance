@@ -9,7 +9,37 @@ from .infra.store import AppState
 from .adapters.tg_client import TelegramClient
 from .adapters.tv_parser import parse_tv_payload
 from .services.resonance_service import ResonanceService
+import logging
 
+
+class LevelColorFormatter(logging.Formatter):
+    COLOR_MAP = {
+        logging.DEBUG: "\033[33m",    # 黄（偏橙）
+        logging.INFO: "\033[32m",     # 绿
+        logging.WARNING: "\033[35m",  # 紫
+        logging.ERROR: "\033[31m",    # 红
+        logging.CRITICAL: "\033[41m", # 红底
+    }
+    RESET = "\033[0m"
+
+    def format(self, record: logging.LogRecord) -> str:
+        level_color = self.COLOR_MAP.get(record.levelno, "")
+        record.levelname = f"{level_color}{record.levelname}{self.RESET}"
+        return super().format(record)
+
+handler = logging.StreamHandler()
+handler.setLevel(logging.DEBUG)
+
+formatter = LevelColorFormatter(
+    fmt="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%H:%M:%S"
+)
+handler.setFormatter(formatter)
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    handlers=[handler]
+)
 app = FastAPI()
 
 # 确保日志目录存在（最小可运行）
@@ -23,10 +53,20 @@ setup_logging(
     backup_count=settings.LOG_BACKUP_COUNT,
 )
 
+# ✅ 日志校验
+for iv in settings.INTERVAL_ORDER:
+    if iv not in settings.WARM_K_MAP:
+        logging.error(f"warm_k_map 缺少周期配置: {iv}")
+        raise ValueError(f"warm_k_map missing key: {iv}")
+    if iv not in settings.INTERVAL_SECONDS:
+        logging.error(f"interval_seconds 缺少周期配置: {iv}")
+        raise ValueError(f"interval_seconds missing key: {iv}")
+
 # 运行期状态（包含 cache + gate）
 state = AppState(
     cooldown_seconds=settings.COOLDOWN_SECONDS,
-    warm_lookback=settings.WARM_LOOKBACK,
+    warm_k_map=settings.WARM_K_MAP,
+    interval_seconds=settings.INTERVAL_SECONDS
 )
 
 # Telegram client + 主服务

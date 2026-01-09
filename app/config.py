@@ -28,7 +28,7 @@ class Settings(BaseSettings):
 
     # Resonance gate
     MIN_RESONANCE: int = 2
-    COOLDOWN_SECONDS: int = 1800
+    COOLDOWN_SECONDS: int = 0
 
     # Config paths
     UNIVERSE_PATH: str = "config/universe.yaml"
@@ -39,15 +39,32 @@ class Settings(BaseSettings):
     LOG_MAX_BYTES: int = 10 * 1024 * 1024
     LOG_BACKUP_COUNT: int = 5
 
-    INTERVAL_ORDER = [
-
-
-        
-        
-        
-        
-        "30s",  "3m", "5m", "15m", "1h", "4h","1d","1w"
+    INTERVAL_ORDER: List = [
+        "30s",  "3m", "5m", "15m", "1h", "4h","1D","1w"
     ]
+
+    INTERVAL_SECONDS: Dict[str,int] = {
+        "30s": 30,
+        "1m": 60,
+        "3m": 180,
+        "5m": 300,
+        "15m": 900,
+        "1h": 3600,
+        "4h": 14400,
+        "1D": 86400,
+        "1w": 604800,
+    }
+
+    WARM_K_MAP: Dict[str, int] = {
+        "30s": 2,
+        "3m": 2,
+        "5m": 2,
+        "15m": 2,
+        "1h": 2,
+        "4h": 2,
+        "1D": 2,
+        "1w": 2,
+    }
 
     class Config:
         env_file = ".env"
@@ -87,13 +104,13 @@ def load_routing(path: str) -> Dict[str, Dict[str, str]]:
     期望结构：
     max_interval_to_topic:
       1w: long
-      1d: mid
+      1D: mid
       4h: short
       1h: ultra
 
     max_interval_min_allowed:
       1w: 1h
-      1d: 15m
+      1D: 15m
       4h: 3m
       1h: 30s
 

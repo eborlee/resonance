@@ -53,10 +53,10 @@ INTERVAL_MAP: Dict[str, str] = {
     "720": "12h",
 
     # day/week (常见写法)
-    "D": "1d",
-    "1D": "1d",
-    "W": "1w",
-    "1W": "1w",
+    "D": "1D",
+    "1D": "1D",
+    "W": "1D",
+    "1W": "1W",
 }
 
 INTERVAL_SECONDS = {
@@ -67,7 +67,7 @@ INTERVAL_SECONDS = {
     "15m": 900,
     "1h": 3600,
     "4h": 14400,
-    "1d": 86400,
+    "1D": 86400,
     "1w": 604800
 }
 
@@ -94,7 +94,7 @@ def map_interval(raw: Any) -> Optional[str]:
     - "60" -> "1h"
     - "15" -> "15m"
     - "240" -> "4h"
-    - "D" -> "1d"
+    - "D" -> "1D"
     """
     if raw is None:
         return None
@@ -151,11 +151,8 @@ def parse_tv_payload(payload: Dict[str, Any]) -> TvEvent:
     symbol = normalize_symbol(str(raw_symbol))
 
     # ts = float(payload.get("ts") or time.time())
-    ts = float(
-        payload.get("timenow")
-        or payload.get("ts")
-        or time.time()
-    )
+    raw_ts = payload.get("timenow") or payload.get("ts")
+    ts = parse_ts(raw_ts)
 
 
     interval = map_interval(payload.get("interval"))

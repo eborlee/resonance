@@ -19,7 +19,7 @@ INTERVAL_RANK: Dict[str, int] = {
     "6h": 10,
     "8h": 11,
     "12h": 12,
-    "1d": 13,
+    "1D": 13,
     "1w": 14,
 }
 
@@ -76,7 +76,7 @@ def choose_topic_by_max_interval(
     根据组合中最大周期选择 topic。
 
     - intervals_present：本次“有效参与”的周期（建议传过滤后的 IN 周期列表）
-    - max_interval_to_topic：例如 {"1w":"long","1d":"mid","4h":"short","1h":"ultra"}
+    - max_interval_to_topic：例如 {"1w":"long","1D":"mid","4h":"short","1h":"ultra"}
     - topic_ids：例如 {"long":1432,"mid":2001,"short":1325,"ultra":3001}
     """
     iv = max_interval(intervals_present)
