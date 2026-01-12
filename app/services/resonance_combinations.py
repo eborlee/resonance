@@ -86,7 +86,7 @@ def match_combinations_with_lifecycle(
     - 新组合是旧组合的升级 → 允许推送升级标记
     """
     from .resonance_combinations import ALLOWED_COMBINATIONS
-
+    logger.warning(f"match函数得到的states:{states}")
     result = []
     current_set = set(raw_intervals)
 
@@ -96,7 +96,7 @@ def match_combinations_with_lifecycle(
             canon = canonical_combo(combo)
             combo_status = pushed_combos.get(canon)
 
-
+            # logger.warning(f"{canon}, {combo_status.get('active') if combo_status is not None else ' '}, {states[max_iv].state}")
             # 情况 1：首次命中
             if combo_status is None:
                 logger.info(f"首次命中组合：{canon}")
@@ -104,6 +104,7 @@ def match_combinations_with_lifecycle(
 
             # 情况 2：已推送但 max_iv 已退场，允许重推
             elif combo_status.get("active") and states[max_iv].state == LevelState.OUT:
+                logger.warning(f"状态为active但最大窗口已退出的组合:{canon}")
                 result.append((canon, False))
                 combo_status["active"] = False  # 标记为非活跃，下次满足才再进 active
 

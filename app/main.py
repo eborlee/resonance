@@ -4,49 +4,21 @@ import os
 from fastapi import FastAPI, Request
 
 from .config import settings
-from .infra.logging import setup_logging
+# from .infra.logging import setup_logging
 from .infra.store import AppState
 from .adapters.tg_client import TelegramClient
 from .adapters.tv_parser import parse_tv_payload
 from .services.resonance_service import ResonanceService
 import logging
+from .infra.logger_config import setup_logging
 
-
-class LevelColorFormatter(logging.Formatter):
-    COLOR_MAP = {
-        logging.DEBUG: "\033[33m",    # 黄（偏橙）
-        logging.INFO: "\033[32m",     # 绿
-        logging.WARNING: "\033[35m",  # 紫
-        logging.ERROR: "\033[31m",    # 红
-        logging.CRITICAL: "\033[41m", # 红底
-    }
-    RESET = "\033[0m"
-
-    def format(self, record: logging.LogRecord) -> str:
-        level_color = self.COLOR_MAP.get(record.levelno, "")
-        record.levelname = f"{level_color}{record.levelname}{self.RESET}"
-        return super().format(record)
-
-handler = logging.StreamHandler()
-handler.setLevel(logging.DEBUG)
-
-formatter = LevelColorFormatter(
-    fmt="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%H:%M:%S"
-)
-handler.setFormatter(formatter)
-
-logging.basicConfig(
-    level=logging.DEBUG,
-    handlers=[handler]
-)
 app = FastAPI()
 
 # 确保日志目录存在（最小可运行）
 log_dir = os.path.dirname(settings.LOG_PATH)
 if log_dir:
     os.makedirs(log_dir, exist_ok=True)
-
+ 
 setup_logging(
     log_path=settings.LOG_PATH,
     max_bytes=settings.LOG_MAX_BYTES,

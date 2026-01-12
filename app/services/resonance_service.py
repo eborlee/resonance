@@ -22,6 +22,7 @@ from .router import (
 
 import logging
 logger = logging.getLogger(__name__)
+# logger.setLevel(logging.DEBUG)
 
 
 
@@ -77,15 +78,14 @@ class ResonanceService:
         self.tg = tg
 
     async def handle_event(self, event: TvEvent):
-        logger.info(" ")
-        logger.info("  ")
-        logger.info("  ")
-        logger.info(f"触发handle event, event:{event}")
+        logger.debug("  \n\n\n\n\n\n\n\n")
+        logger.debug(f" ********* 触发handle event, event:{event}")
+        logger.warning(f"开始处理前的组合cache:{self.state.latest_combo_state}")
         # Step 1️⃣：过滤掉不在 universe 中的 symbol / interval
         event2 = filter_by_universe(event)
         if event2 is None or not event2.signals:
             return
-        logger.info(f"step1:过滤不在 universe 中的 symbol / interval后：{event2}")
+        logger.debug(f"step1:过滤不在 universe 中的 symbol / interval后：{event2}")
         # Step 2️⃣：更新状态缓存（AppState），记录最新值和 IN 状态转换
         # intervals_updated = set()
         for sig in event2.signals:
@@ -100,14 +100,14 @@ class ResonanceService:
                 now_ts=event2.ts,  # 使用事件时间戳记录退出时间
             )
             # intervals_updated.add(interval)
-        logger.info(f"Step2:更新状态缓存：{self.state.cache}")
+        logger.debug(f"Step2:更新状态缓存：{self.state.cache}")
         allowed_intervals = universe.get(event2.symbol, [])
         if not allowed_intervals:
             return
-        logger.info(f"系统允许的窗口：{allowed_intervals}")
+        logger.debug(f"系统允许的窗口：{allowed_intervals}")
         # Step 3️⃣：每个方向单独处理（超买/超卖）
         for side in (Side.OVERSOLD, Side.OVERBOUGHT):
-            logger.info(f"============ 开始处理：{side} ============")
+            logger.debug(f"============ 开始处理：{side} ============")
             states: Dict[str, IntervalState] = {}
 
             # Step 3.1：构建所有周期的状态字典（IN / WARM / OUT）
@@ -124,15 +124,25 @@ class ResonanceService:
                     elif self.state.is_warm(event2.symbol, iv, side, now_ts=event2.ts):
                         st = LevelState.WARM
                     else:
+                        logger.debug(f"{event2.symbol, iv, side} 为OUT")
                         st = LevelState.OUT
+
+                        # ✅ 在此处立即清理所有 max_iv == 当前 iv 的组合
+                        combo_dict = self.state.latest_combo_state[(event2.symbol, side)]
+                        for combo, meta in combo_dict.items():
+                            if not meta.get("active"):
+                                continue
+                            if meta.get("max_iv") == iv:
+                                logger.warning(f"[失效清理] {event2.symbol}-{side} 组合 {combo} 的最大周期 {iv} 已 OUT，标记为 inactive")
+                                meta["active"] = False
                 states[iv] = IntervalState(interval=iv, state=st, value=v)
-            logger.info(f"构建的临时字典 表示每个周期状态：{states}")
+            logger.debug(f"构建的临时字典 表示每个周期状态：{states}")
             # Step 3.2：提取所有处于 IN/WARM 状态的周期
             raw_in_intervals = [
                 iv for iv, st in states.items()
                 if st.state in (LevelState.IN, LevelState.WARM)
             ]
-            logger.info(f"初步提取的处于IN/WARM状态的周期:{raw_in_intervals}")
+            logger.debug(f"初步提取的处于IN/WARM状态的周期:{raw_in_intervals}")
             if not raw_in_intervals:
                 # 没有任何有效 IN，也要更新共振口径（防止“悬空”）
                 self.state.should_emit_resonance(
@@ -141,7 +151,7 @@ class ResonanceService:
                     in_count=0,
                     min_resonance=settings.MIN_RESONANCE,
                 )
-                logger.info(f"{event2.symbol}-{side}没有任何有效超买超卖窗口")
+                logger.debug(f"{event2.symbol}-{side}没有任何有效超买超卖窗口")
                 continue
 
             # # Step 3.3：基于 IN 周期计算最大周期（anchor）
@@ -155,7 +165,7 @@ class ResonanceService:
             # )
 
             in_count = len(raw_in_intervals)
-            logger.info(f"符合状态的窗口数量：{in_count}")
+            logger.debug(f"符合状态的窗口数量：{in_count}")
             # Step 3.5：检查是否满足“共振门槛 + 增强 + cooldown”
             # if not self.state.should_emit_resonance(
             #     symbol=event2.symbol,
@@ -173,8 +183,7 @@ class ResonanceService:
                 states=states,
                 pushed_combos=self.state.latest_combo_state[(event2.symbol, side)],
             )
-            logger.info(f"组合得到的共振组合:{combo_results}")
-            
+            logger.debug(f"组合得到的共振组合:{combo_results}")
             #TODO 后期要删除
             for combo, is_upgrade in combo_results:
                 canon = canonical_combo(combo)
@@ -183,7 +192,7 @@ class ResonanceService:
                         "last_pushed_ts": event2.ts,
                         "max_iv": canon[0],
                     }
-            logger.info(f"最新的self.state.latest_combo_state ：{self.state.latest_combo_state}")
+            logger.debug(f"最新的self.state.latest_combo_state ：{self.state.latest_combo_state}")
             continue
             # Step 5️⃣：逐个组合执行推送
             for combo, is_upgrade in combo_results:
