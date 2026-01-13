@@ -22,18 +22,18 @@ ALLOWED_COMBINATIONS = [
 ]
 
 COMBINATION_ROUTING = {
-    ("1D", "4h", "1h"): settings.TG_TOPIC_LONG,
-    ("1D", "4h"): settings.TG_TOPIC_LONG,
-    ("1D", "1h"): settings.TG_TOPIC_LONG,
+    ("1D", "4h", "1h"): settings.TG_TOPIC_DAY,
+    ("1D", "4h"): settings.TG_TOPIC_DAY,
+    ("1D", "1h"): settings.TG_TOPIC_DAY,
 
-    ("4h", "1h"): settings.TG_TOPIC_MID,
-    ("4h", "1h", "15m"): settings.TG_TOPIC_MID,
-    ("4h", "15m"): settings.TG_TOPIC_MID,
+    ("4h", "1h"): settings.TG_TOPIC_4H,
+    ("4h", "1h", "15m"): settings.TG_TOPIC_4H,
+    ("4h", "15m"): settings.TG_TOPIC_4H,
 
-    ("1h", "15m"): settings.TG_TOPIC_SHORT,
-    ("1h", "15m", "3m"): settings.TG_TOPIC_SHORT,
+    ("1h", "15m"): settings.TG_TOPIC_1H,
+    ("1h", "15m", "3m"): settings.TG_TOPIC_1H,
 
-    ("15m", "3m"): settings.TG_TOPIC_ULTRA,
+    ("15m", "3m"): settings.TG_TOPIC_15MIN,
     
 }
 
@@ -70,14 +70,37 @@ def match_combinations(
     return result
 
 
-def is_upgrade(combo: Tuple[str, ...], pushed: Dict[Tuple[str, ...], Dict]) -> bool:
-    return any(set(prev).issubset(set(combo)) and len(combo) > len(prev) for prev in pushed)
+def is_upgrade(
+    combo: Tuple[str, ...],
+    last_active: Tuple[str, ...] | None,
+    interval_state: Dict[str, LevelState],
+) -> bool:
+    """
+    只在「新增周期是 IN」时，认为是 upgrade
+    """
+    if not last_active:
+        return False
 
+    prev = set(last_active)
+    curr = set(combo)
+
+    # 必须是扩展
+    if not prev.issubset(curr):
+        return False
+
+    added = curr - prev
+    if not added:
+        return False
+
+    # 关键：新增周期必须是 IN
+    return all(interval_state[iv] == LevelState.IN for iv in added)
 
 def match_combinations_with_lifecycle(
     raw_intervals: List[str],
     states: Dict[str, IntervalState],  # 当前 symbol 的周期状态集合
     pushed_combos: Dict[Tuple[str, ...], Dict],  # 组合 → {"active": bool, "max_iv": str, ...}
+    last_active_combo: Tuple[str, ...] | None,
+    allowed_combo:List[Tuple[str, ...]],
 ) -> List[Tuple[Tuple[str, ...], bool]]:
     """
     识别当前满足条件的组合，支持以下逻辑：
@@ -90,16 +113,24 @@ def match_combinations_with_lifecycle(
     result = []
     current_set = set(raw_intervals)
 
-    for combo in ALLOWED_COMBINATIONS:
+    for combo in allowed_combo:
+
         if all(iv in current_set for iv in combo):
             max_iv = get_max_interval(combo) # 根据配置文件中的周期顺序判断当前组合的最大周期
             canon = canonical_combo(combo)
             combo_status = pushed_combos.get(canon)
 
+            if last_active_combo is not None and is_upgrade(canon, last_active_combo, states):
+                result.append((canon, True))
             # logger.warning(f"{canon}, {combo_status.get('active') if combo_status is not None else ' '}, {states[max_iv].state}")
             # 情况 1：首次命中
-            if combo_status is None:
+            elif combo_status is None:
                 logger.info(f"首次命中组合：{canon}")
+                result.append((canon, False))
+
+            # 情况 2：组合存在于cache但是状态为False，说明被重置过了。可以重新推送。
+            elif combo_status.get("active") is False:
+                # ✅ 之前推送过，现在 inactive，再次满足条件，可以重新推送
                 result.append((canon, False))
 
             # 情况 2：已推送但 max_iv 已退场，允许重推
@@ -109,7 +140,8 @@ def match_combinations_with_lifecycle(
                 combo_status["active"] = False  # 标记为非活跃，下次满足才再进 active
 
             # 情况 3：升级组合
-            elif is_upgrade(canon, pushed_combos):
+            elif is_upgrade(canon, last_active_combo, states):
+                logger.warning(f"升级的情况:{canon}, 已推过的组合:{pushed_combos}")
                 result.append((canon, True))
 
     return result

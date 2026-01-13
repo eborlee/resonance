@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  resonance:
+    build: .
+    container_name: resonance
+    restart: unless-stopped
+
+    ports:
+      - "8000:8000"
+
+    env_file:
+      - .env
+
+    volumes:
+      # ⭐ 配置热更新
+      - ./config:/app/config
+
+      # ⭐ 日志持久化
+      - ./logs:/app/logs
+
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000

@@ -57,6 +57,12 @@ class AppState:
         self.warm_k_map = warm_k_map  # 每个周期允许几根K线 warm
         self.interval_seconds = interval_seconds  # 每个周期一根K线多少秒
 
+        
+        self.last_active_combo: Dict[
+            Tuple[str, Side, str], Optional[Tuple[str, ...]]
+        ] = defaultdict(lambda: None)
+
+
         self.cache: Dict[Tuple[str, str], IntervalCache] = {}
         self.gate: Dict[Tuple[str, str], GateRecord] = {}
 

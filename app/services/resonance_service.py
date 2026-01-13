@@ -1,10 +1,10 @@
 from __future__ import annotations
-
+import asyncio
 import hashlib
 from typing import List, Dict
 from .resonance_combinations import canonical_combo, match_combinations_with_lifecycle, COMBINATION_ROUTING
-
-from ..config import settings, universe, routing_rules
+from .resonance_combinations import ALLOWED_COMBINATIONS
+from ..config import settings, universe, routing_rules,get_routing_rules,get_universe
 from ..domain.models import (
     Side,
     LevelState,
@@ -12,6 +12,7 @@ from ..domain.models import (
     IntervalState,
     ResonanceSnapshot,
 )
+from ..infra.utils import ts_to_utc_str
 from ..infra.store import AppState
 from ..adapters.tg_client import TelegramClient
 from .router import (
@@ -32,7 +33,8 @@ def filter_by_universe(event: TvEvent) -> TvEvent | None:
     - 不在 universe 的 symbol 直接丢弃
     - interval 不在允许列表的直接丢弃
     """
-    allowed_intervals = universe.get(event.symbol)
+    allowed_intervals = get_universe().get(event.symbol)
+    # allowed_intervals = universe.get(event.symbol)
     if not allowed_intervals:
         
         return None
@@ -48,7 +50,7 @@ def filter_by_universe(event: TvEvent) -> TvEvent | None:
 
 def format_message(snapshot: ResonanceSnapshot, in_intervals: List[str]) -> str:
     """
-    推送内容：只展示“有效参与”的 IN 周期（已经过 floor 过滤）
+    推送内容：只展示“有效参与”的 IN 周
     """
     lines: List[str] = []
     lines.append(f"{snapshot.symbol}  {snapshot.side.value.upper()}  IN={len(in_intervals)}")
@@ -57,9 +59,10 @@ def format_message(snapshot: ResonanceSnapshot, in_intervals: List[str]) -> str:
         st = snapshot.states.get(iv)
         if st is None:
             continue
-        # 这里理论上都是 IN，但保持防御式写法
         if st.state == LevelState.IN:
             lines.append(f"- {iv}: IN ({st.value:.2f})")
+        elif st.state == LevelState.WARM:
+            lines.append(f"- {iv}: WARM ({st.value:.2f})")
 
     return "\n".join(lines)
 
@@ -101,7 +104,8 @@ class ResonanceService:
             )
             # intervals_updated.add(interval)
         logger.debug(f"Step2:更新状态缓存：{self.state.cache}")
-        allowed_intervals = universe.get(event2.symbol, [])
+        allowed_intervals = get_universe().get(event2.symbol,[])
+        # allowed_intervals = universe.get(event2.symbol, [])
         if not allowed_intervals:
             return
         logger.debug(f"系统允许的窗口：{allowed_intervals}")
@@ -109,7 +113,7 @@ class ResonanceService:
         for side in (Side.OVERSOLD, Side.OVERBOUGHT):
             logger.debug(f"============ 开始处理：{side} ============")
             states: Dict[str, IntervalState] = {}
-
+            
             # Step 3.1：构建所有周期的状态字典（IN / WARM / OUT）
             for iv in allowed_intervals:
                 rec = self.state.cache.get((event2.symbol, iv))
@@ -123,9 +127,12 @@ class ResonanceService:
                     # 此处event2.ts就是推送时间，即k线收盘时间
                     elif self.state.is_warm(event2.symbol, iv, side, now_ts=event2.ts):
                         st = LevelState.WARM
+                    # 一旦判定这个窗口为OUT， 立刻重置以此窗口作为最大窗口的组合。
                     else:
+                        key = (event2.symbol, side, iv)
                         logger.debug(f"{event2.symbol, iv, side} 为OUT")
                         st = LevelState.OUT
+                        self.state.last_active_combo[key] = None
 
                         # ✅ 在此处立即清理所有 max_iv == 当前 iv 的组合
                         combo_dict = self.state.latest_combo_state[(event2.symbol, side)]
@@ -177,34 +184,77 @@ class ResonanceService:
             #     continue
 
             # Step 4️⃣：匹配组合（基于组合白名单 + 生命周期 + 升级）
+            # key = (event2.symbol, side, iv)
+            # last_active = self.state.last_active_combo.get((event2.symbol, side))
 
-            combo_results = match_combinations_with_lifecycle(
-                raw_intervals=raw_in_intervals,
-                states=states,
-                pushed_combos=self.state.latest_combo_state[(event2.symbol, side)],
+            # combo_results = match_combinations_with_lifecycle(
+            #     raw_intervals=raw_in_intervals,
+            #     states=states,
+            #     pushed_combos=self.state.latest_combo_state[(event2.symbol, side)],
+            #     last_active_combo=last_active    
+            # )
+            combo_results_all = []
+            sett = set(
+                max_interval(combo) for combo in COMBINATION_ROUTING.keys()
+                if all(iv in raw_in_intervals for iv in combo)
             )
+            logger.warning(f"set::::{sett}")
+            # ★ 核心改动：按 max_iv（= topic）循环
+            for max_iv in set(
+                max_interval(combo) for combo in COMBINATION_ROUTING.keys()
+                if all(iv in raw_in_intervals for iv in combo)
+            ):
+                allowed = [
+                    combo for combo in ALLOWED_COMBINATIONS
+                    if max_interval(combo) == max_iv
+                ]
+                last_active = self.state.last_active_combo.get(
+                    (event2.symbol, side, max_iv)
+                )
+
+                combo_results = match_combinations_with_lifecycle(
+                    raw_intervals=raw_in_intervals,
+                    states=states,
+                    pushed_combos=self.state.latest_combo_state[(event2.symbol, side)],
+                    last_active_combo=last_active,
+                    allowed_combo=allowed
+                )
+
+                combo_results_all.extend(combo_results)
+
+            combo_results = combo_results_all
             logger.debug(f"组合得到的共振组合:{combo_results}")
-            #TODO 后期要删除
-            for combo, is_upgrade in combo_results:
-                canon = canonical_combo(combo)
-                self.state.latest_combo_state[(event2.symbol, side)][canon] = {
-                        "active": True,
-                        "last_pushed_ts": event2.ts,
-                        "max_iv": canon[0],
-                    }
-            logger.debug(f"最新的self.state.latest_combo_state ：{self.state.latest_combo_state}")
-            continue
+
+
+            # #TODO 后期解开推送的逻辑代码后要删除
+            # for combo, is_upgrade in combo_results:
+            #     canon = canonical_combo(combo)
+            #     self.state.latest_combo_state[(event2.symbol, side)][canon] = {
+            #             "active": True,
+            #             "last_pushed_ts": event2.ts,
+            #             "max_iv": canon[0],
+            #         }
+            # logger.debug(f"最新的self.state.latest_combo_state ：{self.state.latest_combo_state}")
+            
+            if not combo_results:
+                logger.debug(f"{event2.symbol}-{side} 本次无有效组合")
+                continue
+            
             # Step 5️⃣：逐个组合执行推送
+            send_tasks = []
+
             for combo, is_upgrade in combo_results:
-                # ✅ 检查路由是否存在
-                if combo not in COMBINATION_ROUTING:
-                    logger.warning(f"未定义 routing topic 的组合 {combo} 被跳过")
-                    continue  # 忽略未配置 topic 的组合，避免 KeyError
-
-                topic_id = COMBINATION_ROUTING[combo]
-
-                # Step 5.1：构建 snapshot + 消息体
                 canon = canonical_combo(combo)
+                key = (event2.symbol, side, canon[0])
+
+                # 5.0 防御：必须有 routing
+                if canon not in COMBINATION_ROUTING:
+                    logger.warning(f"未定义 routing topic 的组合 {canon} 被跳过")
+                    continue
+
+                topic_id = COMBINATION_ROUTING[canon]
+
+                # 5.1 构建 snapshot（纯计算）
                 sig_str = f"{side.value}|{'|'.join(canon)}"
                 signature = hashlib.md5(sig_str.encode("utf-8")).hexdigest()
 
@@ -213,24 +263,85 @@ class ResonanceService:
                     side=side,
                     ts=event2.ts,
                     states=states,
-                    score=len(combo),
+                    score=len(canon),
                     signature=signature,
                 )
 
                 msg_prefix = "[升级]" if is_upgrade else ""
-                msg = f"{msg_prefix} {format_message(snap, list(combo))}"
+                msg = f"{msg_prefix}\n{ts_to_utc_str(event.ts)}\n {format_message(snap, list(canon))}"
 
-                # Step 5.2：发送推送
-                await self.tg.send_message(
-                    chat_id=settings.TG_CHAT_ID,
-                    text=msg,
-                    message_thread_id=topic_id,
-                )
+                # ====== 关键点 1：先更新 state（串行、确定性） ======
+                self.state.last_active_combo[key] = canon
 
-                # Step 5.3：记录该组合状态为“活跃”
-                
                 self.state.latest_combo_state[(event2.symbol, side)][canon] = {
                     "active": True,
                     "last_pushed_ts": event2.ts,
-                    "max_iv": combo[0],
+                    "max_iv": canon[0],
                 }
+
+                logger.warning(
+                    f"[推送] {event2.symbol}-{side} combo={canon} "
+                    f"{'UPGRADE' if is_upgrade else 'NEW'}"
+                )
+
+                # ====== 关键点 2：只把 send 动作收集起来 ======
+                send_tasks.append(
+                    self.tg.send_message(
+                        chat_id=settings.TG_CHAT_ID,
+                        text=msg,
+                        message_thread_id=topic_id,
+                    )
+                )
+
+            # ====== 关键点 3：for 循环结束后，并发执行外部 IO ======
+            if send_tasks:
+                await asyncio.gather(*send_tasks, return_exceptions=True)
+
+            # for combo, is_upgrade in combo_results:
+            #     canon = canonical_combo(combo)
+            #     key = (event2.symbol, side, canon[0])
+
+            #     # 5.0 防御：必须有 routing
+            #     if canon not in COMBINATION_ROUTING:
+            #         logger.warning(f"未定义 routing topic 的组合 {canon} 被跳过")
+            #         continue
+
+            #     topic_id = COMBINATION_ROUTING[canon]
+
+            #     # 5.1 构建 snapshot
+            #     sig_str = f"{side.value}|{'|'.join(canon)}"
+            #     signature = hashlib.md5(sig_str.encode("utf-8")).hexdigest()
+
+            #     snap = ResonanceSnapshot(
+            #         symbol=event2.symbol,
+            #         side=side,
+            #         ts=event2.ts,
+            #         states=states,
+            #         score=len(canon),
+            #         signature=signature,
+            #     )
+
+            #     msg_prefix = "[升级]" if is_upgrade else ""
+            #     msg = f"{msg_prefix}\n{ts_to_utc_str(event.ts)}\n {format_message(snap, list(canon))}"
+
+            #     # 5.2 推送
+            #     await self.tg.send_message(
+            #         chat_id=settings.TG_CHAT_ID,
+            #         text=msg,
+            #         message_thread_id=topic_id,
+            #     )
+
+            #     logger.warning(
+            #         f"[推送] {event2.symbol}-{side} combo={canon} "
+            #         f"{'UPGRADE' if is_upgrade else 'NEW'}"
+            #     )
+
+            #     self.state.last_active_combo[key] = canon
+
+
+            #     # 5.3 推送成功后，**唯一一次** 更新 combo 状态
+            #     self.state.latest_combo_state[(event2.symbol, side)][canon] = {
+            #         "active": True,
+            #         "last_pushed_ts": event2.ts,
+            #         "max_iv": canon[0],
+            #     }

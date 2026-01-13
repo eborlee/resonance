@@ -34,7 +34,7 @@ def setup_logging(log_path: str, max_bytes: int = 10*1024*1024, backup_count: in
 
     # Console handler（带颜色）
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.DEBUG)
+    console_handler.setLevel(logging.INFO)
     console_formatter = LevelColorFormatter(
         fmt="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
         datefmt="%H:%M:%S"
@@ -43,19 +43,19 @@ def setup_logging(log_path: str, max_bytes: int = 10*1024*1024, backup_count: in
     root_logger.addHandler(console_handler)
 
     # File handler（不带颜色，避免乱码）
-    # file_handler = RotatingFileHandler(
-    #     filename=log_path,
-    #     maxBytes=max_bytes,
-    #     backupCount=backup_count,
-    #     encoding="utf-8"
-    # )
-    # file_handler.setLevel(logging.DEBUG)
-    # file_formatter = logging.Formatter(
-    #     fmt="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
-    #     datefmt="%Y-%m-%d %H:%M:%S"
-    # )
-    # file_handler.setFormatter(file_formatter)
-    # root_logger.addHandler(file_handler)
+    file_handler = RotatingFileHandler(
+        filename=log_path,
+        maxBytes=max_bytes,
+        backupCount=backup_count,
+        encoding="utf-8"
+    )
+    file_handler.setLevel(logging.DEBUG)
+    file_formatter = logging.Formatter(
+        fmt="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+    file_handler.setFormatter(file_formatter)
+    root_logger.addHandler(file_handler)
 
     # ✅ 设置各个模块的日志级别（你可以写在 settings.py 或 logging.yaml 中）
     module_log_levels = {

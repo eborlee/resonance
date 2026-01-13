@@ -16,10 +16,11 @@ class Settings(BaseSettings):
     TG_CHAT_ID: str
 
     # 你新的 topic 分层（按最大周期路由）
-    TG_TOPIC_LONG: int
-    TG_TOPIC_MID: int
-    TG_TOPIC_SHORT: int
-    TG_TOPIC_ULTRA: int
+    TG_TOPIC_WEEK: int
+    TG_TOPIC_DAY: int
+    TG_TOPIC_4H: int
+    TG_TOPIC_1H: int
+    TG_TOPIC_15MIN: int
 
     # Thresholds
     OB_LEVEL: float = 40.0
@@ -35,7 +36,7 @@ class Settings(BaseSettings):
     ROUTING_PATH: str = "config/routing.yaml"
 
     # Logging
-    LOG_PATH: str = "data/app.log"
+    LOG_PATH: str = "logs/app.log"
     LOG_MAX_BYTES: int = 10 * 1024 * 1024
     LOG_BACKUP_COUNT: int = 5
 
@@ -142,5 +143,10 @@ def load_routing(path: str) -> Dict[str, Dict[str, str]]:
 
 
 settings = Settings()
+def get_universe() -> Dict[str, List[str]]:
+    return load_universe(settings.UNIVERSE_PATH)
+
+def get_routing_rules() -> Dict[str, Dict[str, str]]:
+    return load_routing(settings.ROUTING_PATH)
 universe = load_universe(settings.UNIVERSE_PATH)
 routing_rules = load_routing(settings.ROUTING_PATH)
