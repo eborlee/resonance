@@ -82,11 +82,12 @@ class ResonanceService:
 
     async def handle_event(self, event: TvEvent):
         logger.debug("  \n\n\n\n\n\n\n\n")
-        logger.debug(f" ********* 触发handle event, event:{event}")
+        logger.info(f"收到Event数据\nevent:{event}")
         logger.warning(f"开始处理前的组合cache:{self.state.latest_combo_state}")
         # Step 1️⃣：过滤掉不在 universe 中的 symbol / interval
         event2 = filter_by_universe(event)
         if event2 is None or not event2.signals:
+            logger.warning(f"⚠️不在Universe中被定义的标的或窗口! \nEvent信息:{event}")
             return
         logger.debug(f"step1:过滤不在 universe 中的 symbol / interval后：{event2}")
         # Step 2️⃣：更新状态缓存（AppState），记录最新值和 IN 状态转换

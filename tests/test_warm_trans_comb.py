@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 import requests
 
 # URL = "http://127.0.0.1:8000/webhook/tradingview"
-URL = "http://8.209.204.201:8000/webhook/tradingview"
+URL = "http://8.209.204.201:80/webhook/tradingview"
 
 def post(symbol, interval, value, ts, desc):
     payload = {
