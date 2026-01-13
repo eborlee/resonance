@@ -7,19 +7,35 @@ services:
     restart: unless-stopped
 
     ports:
-      - "8000:8000"
-
+      - "8000:8000"  # 可选：调试用；正式部署可注释掉（仅 nginx 访问）
     env_file:
       - .env
 
     volumes:
-      # ⭐ 配置热更新
-      - ./config:/app/config
-
-      # ⭐ 日志持久化
-      - ./logs:/app/logs
+      - ./config:/app/config    # ⭐ 配置热更新
+      - ./logs:/app/logs        # ⭐ 日志持久化
 
     command: >
       uvicorn app.main:app
       --host 0.0.0.0
       --port 8000
+
+    networks:
+      - appnet
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"  # 外部请求走 nginx
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - resonance
+    networks:
+      - appnet
+
+networks:
+  appnet:
+    driver: bridge
