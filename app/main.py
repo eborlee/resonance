@@ -12,6 +12,7 @@ from .services.resonance_service import ResonanceService
 import logging
 from .infra.logger_config import setup_logging
 
+logger = logging.getLogger(__name__)
 app = FastAPI()
 
 # 确保日志目录存在（最小可运行）

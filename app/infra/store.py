@@ -53,6 +53,7 @@ class AppState:
         warm_k_map: Dict[str, int],
         interval_seconds: Dict[str, int],
     ):
+        logger.info(" - Initializing AppState...")
         self.cooldown_seconds = float(cooldown_seconds)
         self.warm_k_map = warm_k_map  # 每个周期允许几根K线 warm
         self.interval_seconds = interval_seconds  # 每个周期一根K线多少秒
