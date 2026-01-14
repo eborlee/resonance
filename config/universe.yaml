@@ -8,3 +8,36 @@ symbols:
 
   SOLUSDT:
     intervals: [4h, 1h, 15m, 5m, 3m]
+  
+  AAVEUSDT:
+    intervals: [1D, 4h, 1h, 15m, 5m, 3m,30s]
+
+  FARTCOINUSDT:
+    intervals: [1D, 4h, 1h, 15m, 5m, 3m,30s]
+
+  OKBUSDT:
+    intervals: [1D, 4h, 1h, 15m, 5m, 3m,30s]
+
+  BNBUSDT:
+    intervals: [1D, 4h, 1h, 15m, 5m, 3m,30s]
+
+  ENAUSDT:
+    intervals: [1D, 4h, 1h, 15m, 5m, 3m,30s]
+
+  JTOUSDT:
+    intervals: [1D, 4h, 1h, 15m, 5m, 3m,30s]
+
+  XRPUSDT:
+    intervals: [1D, 4h, 1h, 15m, 5m, 3m,30s]
+
+  LINKUSDT:
+    intervals: [1D, 4h, 1h, 15m, 5m, 3m,30s]
+  
+  HYPEUSDT:
+    intervals: [1D, 4h, 1h, 15m, 5m, 3m,30s]
+
+  DOGEUSDT:
+    intervals: [1D, 4h, 1h, 15m, 5m, 3m,30s]
+
+  PENGUUSDT:
+    intervals: [1D, 4h, 1h, 15m, 5m, 3m,30s]
