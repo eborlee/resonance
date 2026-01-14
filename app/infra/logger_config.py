@@ -15,9 +15,20 @@ class LevelColorFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         level_color = self.COLOR_MAP.get(record.levelno, "")
-        record.levelname = f"{level_color}{record.levelname}{self.RESET}"
-        record.name = f"{level_color}{record.name}{self.RESET}"
-        return super().format(record)
+
+        # ⚠️ 不要污染 record，本地保存原值
+        original_levelname = record.levelname
+        original_name = record.name
+
+        try:
+            record.levelname = f"{level_color}{original_levelname}{self.RESET}"
+            record.name = f"{level_color}{original_name}{self.RESET}"
+            return super().format(record)
+        finally:
+            # ✅ 恢复 record，给后续 handler 用
+            record.levelname = original_levelname
+            record.name = original_name
+
 
 def setup_logging(log_path: str, max_bytes: int = 10*1024*1024, backup_count: int = 5):
     # 确保目录存在
