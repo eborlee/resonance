@@ -73,7 +73,7 @@ def match_combinations(
 def is_upgrade(
     combo: Tuple[str, ...],
     last_active: Tuple[str, ...] | None,
-    interval_state: Dict[str, LevelState],
+    interval_state: Dict[str, IntervalState],
 ) -> bool:
     """
     只在「新增周期是 IN」时，认为是 upgrade
@@ -93,7 +93,7 @@ def is_upgrade(
         return False
 
     # 关键：新增周期必须是 IN
-    return all(interval_state[iv] == LevelState.IN for iv in added)
+    return all(interval_state[iv].state == LevelState.IN for iv in added)
 
 def match_combinations_with_lifecycle(
     raw_intervals: List[str],

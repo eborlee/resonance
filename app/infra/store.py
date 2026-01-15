@@ -167,8 +167,8 @@ class AppState:
         # 防御性代码：如果没有配好周期秒数（极少发生），就直接认为 不在 warm 状态
         if candle_sec is None:
             return False
-        logger.debug(f"当前时间戳距离上次离开区间的秒数{now_ts-exit_ts}, 该窗口的warm秒数：{warm_k * candle_sec}")
-        logger.debug(f"当前时间戳距离上次离开的蜡烛数{(now_ts-exit_ts)/candle_sec}")
+        # logger.debug(f"当前时间戳距离上次离开区间的秒数{now_ts-exit_ts}, 该窗口的warm秒数：{warm_k * candle_sec}")
+        # logger.debug(f"当前时间戳距离上次离开的蜡烛数{(now_ts-exit_ts)/candle_sec}")
         return (now_ts - exit_ts) < warm_k * candle_sec
 
     # =========================================================

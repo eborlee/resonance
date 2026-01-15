@@ -53,7 +53,7 @@ def format_message(snapshot: ResonanceSnapshot, in_intervals: List[str]) -> str:
     推送内容：只展示“有效参与”的 IN 周
     """
     lines: List[str] = []
-    lines.append(f"{snapshot.symbol}  {snapshot.side.value.upper()}  IN={len(in_intervals)}")
+    lines.append(f"{snapshot.symbol} {snapshot.side.display}【{len(in_intervals)}】")
 
     for iv in in_intervals:
         st = snapshot.states.get(iv)
@@ -83,13 +83,13 @@ class ResonanceService:
     async def handle_event(self, event: TvEvent):
         logger.debug("  \n\n\n\n\n\n\n\n")
         logger.info(f"收到Event数据\nevent:{event}")
-        logger.warning(f"开始处理前的组合cache:{self.state.latest_combo_state}")
+        # logger.warning(f"开始处理前的组合cache:{self.state.latest_combo_state}")
         # Step 1️⃣：过滤掉不在 universe 中的 symbol / interval
         event2 = filter_by_universe(event)
         if event2 is None or not event2.signals:
             logger.warning(f"⚠️不在Universe中被定义的标的或窗口! \nEvent信息:{event}")
             return
-        logger.debug(f"step1:过滤不在 universe 中的 symbol / interval后：{event2}")
+        # logger.debug(f"step1:过滤不在 universe 中的 symbol / interval后：{event2}")
         # Step 2️⃣：更新状态缓存（AppState），记录最新值和 IN 状态转换
         # intervals_updated = set()
         for sig in event2.signals:
@@ -104,12 +104,12 @@ class ResonanceService:
                 now_ts=event2.ts,  # 使用事件时间戳记录退出时间
             )
             # intervals_updated.add(interval)
-        logger.debug(f"Step2:更新状态缓存：{self.state.cache}")
+        # logger.debug(f"Step2:更新状态缓存：{self.state.cache}")
         allowed_intervals = get_universe().get(event2.symbol,[])
         # allowed_intervals = universe.get(event2.symbol, [])
         if not allowed_intervals:
             return
-        logger.debug(f"系统允许的窗口：{allowed_intervals}")
+        # logger.debug(f"系统允许的窗口：{allowed_intervals}")
         # Step 3️⃣：每个方向单独处理（超买/超卖）
         for side in (Side.OVERSOLD, Side.OVERBOUGHT):
             logger.debug(f"============ 开始处理：{side} ============")
@@ -205,10 +205,14 @@ class ResonanceService:
                 max_interval(combo) for combo in COMBINATION_ROUTING.keys()
                 if all(iv in raw_in_intervals for iv in combo)
             ):
+                if max_iv is None:
+                    logger.warning("max_iv计算出错为None")
+                    continue
                 allowed = [
                     combo for combo in ALLOWED_COMBINATIONS
                     if max_interval(combo) == max_iv
                 ]
+                
                 last_active = self.state.last_active_combo.get(
                     (event2.symbol, side, max_iv)
                 )
@@ -268,7 +272,7 @@ class ResonanceService:
                     signature=signature,
                 )
 
-                msg_prefix = "[升级]" if is_upgrade else ""
+                msg_prefix = "‼️升级‼️" if is_upgrade else ""
                 msg = f"{msg_prefix}\n{ts_to_utc_str(event.ts)}\n {format_message(snap, list(canon))}"
 
                 # ====== 关键点 1：先更新 state（串行、确定性） ======
