@@ -131,7 +131,7 @@ class ResonanceService:
                     # 一旦判定这个窗口为OUT， 立刻重置以此窗口作为最大窗口的组合。
                     else:
                         key = (event2.symbol, side, iv)
-                        logger.debug(f"{event2.symbol, iv, side} 为OUT")
+                        # logger.debug(f"{event2.symbol, iv, side} 为OUT")
                         st = LevelState.OUT
                         self.state.last_active_combo[key] = None
 
@@ -144,7 +144,7 @@ class ResonanceService:
                                 logger.warning(f"[失效清理] {event2.symbol}-{side} 组合 {combo} 的最大周期 {iv} 已 OUT，标记为 inactive")
                                 meta["active"] = False
                 states[iv] = IntervalState(interval=iv, state=st, value=v)
-            logger.debug(f"构建的临时字典 表示每个周期状态：{states}")
+            # logger.debug(f"构建的临时字典 表示每个周期状态：{states}")
             # Step 3.2：提取所有处于 IN/WARM 状态的周期
             raw_in_intervals = [
                 iv for iv, st in states.items()
@@ -195,11 +195,7 @@ class ResonanceService:
             #     last_active_combo=last_active    
             # )
             combo_results_all = []
-            sett = set(
-                max_interval(combo) for combo in COMBINATION_ROUTING.keys()
-                if all(iv in raw_in_intervals for iv in combo)
-            )
-            logger.warning(f"set::::{sett}")
+            
             # ★ 核心改动：按 max_iv（= topic）循环
             for max_iv in set(
                 max_interval(combo) for combo in COMBINATION_ROUTING.keys()
