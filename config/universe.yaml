@@ -1,43 +1,70 @@
 # 监控的币种及其纳入考量的时间窗口
 symbols:
   BTCUSDT:
-    intervals: [1D, 4h, 1h, 15m, 5m, 3m,30s]
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
 
   ETHUSDT:
-    intervals: [4h, 1h, 15m, 5m, 3m]
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
 
   SOLUSDT:
-    intervals: [4h, 1h, 15m, 5m, 3m]
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
   
   AAVEUSDT:
-    intervals: [1D, 4h, 1h, 15m, 5m, 3m,30s]
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
 
   FARTCOINUSDT:
-    intervals: [1D, 4h, 1h, 15m, 5m, 3m,30s]
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
 
   OKBUSDT:
-    intervals: [1D, 4h, 1h, 15m, 5m, 3m,30s]
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
 
   BNBUSDT:
-    intervals: [1D, 4h, 1h, 15m, 5m, 3m,30s]
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
 
   ENAUSDT:
-    intervals: [1D, 4h, 1h, 15m, 5m, 3m,30s]
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
 
   JTOUSDT:
-    intervals: [1D, 4h, 1h, 15m, 5m, 3m,30s]
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
 
   XRPUSDT:
-    intervals: [1D, 4h, 1h, 15m, 5m, 3m,30s]
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
 
   LINKUSDT:
-    intervals: [1D, 4h, 1h, 15m, 5m, 3m,30s]
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
   
   HYPEUSDT:
-    intervals: [1D, 4h, 1h, 15m, 5m, 3m,30s]
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
 
   DOGEUSDT:
-    intervals: [1D, 4h, 1h, 15m, 5m, 3m,30s]
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
 
   PENGUUSDT:
-    intervals: [1D, 4h, 1h, 15m, 5m, 3m,30s]
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
+
+  BGBUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
+
+  ZECUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
+
+  DASHUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
+
+  ASTERUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
+
+  SUIUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
+
+  AVAXUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
+
+  RAYUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
+  
+  BCHUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
+
+  LTCUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]

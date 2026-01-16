@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     LOG_BACKUP_COUNT: int = 5
 
     INTERVAL_ORDER: List = [
-        "30s",  "3m", "5m", "15m", "1h", "4h","1D","1w"
+        "30s",  "3m", "5m", "15m", "1h", "4h","1D","1W"
     ]
 
     INTERVAL_SECONDS: Dict[str,int] = {
@@ -53,7 +53,7 @@ class Settings(BaseSettings):
         "1h": 3600,
         "4h": 14400,
         "1D": 86400,
-        "1w": 604800,
+        "1W": 604800,
     }
 
     WARM_K_MAP: Dict[str, int] = {
@@ -64,7 +64,7 @@ class Settings(BaseSettings):
         "1h": 2,
         "4h": 2,
         "1D": 2,
-        "1w": 2,
+        "1W": 2,
     }
 
     class Config:
@@ -104,13 +104,13 @@ def load_routing(path: str) -> Dict[str, Dict[str, str]]:
 
     期望结构：
     max_interval_to_topic:
-      1w: long
+      1W: long
       1D: mid
       4h: short
       1h: ultra
 
     max_interval_min_allowed:
-      1w: 1h
+      1W: 1h
       1D: 15m
       4h: 3m
       1h: 30s
