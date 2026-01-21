@@ -32,6 +32,8 @@ COMBINATION_ROUTING = {
 
     ("1h", "15m"): settings.TG_TOPIC_1H,
     ("1h", "15m", "3m"): settings.TG_TOPIC_1H,
+    ("1h", "3m"): settings.TG_TOPIC_1H,
+
 
     ("15m", "3m"): settings.TG_TOPIC_15MIN,
     
