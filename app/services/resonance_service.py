@@ -20,6 +20,7 @@ from .router import (
     max_interval,
     apply_min_interval_floor,
 )
+from collections import defaultdict
 
 import logging
 logger = logging.getLogger(__name__)
@@ -194,6 +195,7 @@ class ResonanceService:
             #     pushed_combos=self.state.latest_combo_state[(event2.symbol, side)],
             #     last_active_combo=last_active    
             # )
+            combo_results_by_max_iv: dict[str, list[tuple[tuple[str, ...], bool]]] = defaultdict(list)
             combo_results_all = []
             
             # ★ 核心改动：按 max_iv（= topic）循环
@@ -222,6 +224,8 @@ class ResonanceService:
                 )
 
                 combo_results_all.extend(combo_results)
+                combo_results_by_max_iv[max_iv].extend(combo_results)
+
 
             combo_results = combo_results_all
             logger.debug(f"组合得到的共振组合:{combo_results}")
@@ -241,108 +245,92 @@ class ResonanceService:
                 logger.debug(f"{event2.symbol}-{side} 本次无有效组合")
                 continue
             
-            # Step 5️⃣：逐个组合执行推送
+            # Step 5️⃣：逐 topic（max_iv）执行推送
             send_tasks = []
 
-            for combo, is_upgrade in combo_results:
-                canon = canonical_combo(combo)
-                key = (event2.symbol, side, canon[0])
-
-                # 5.0 防御：必须有 routing
-                if canon not in COMBINATION_ROUTING:
-                    logger.warning(f"未定义 routing topic 的组合 {canon} 被跳过")
+            for max_iv, results in combo_results_by_max_iv.items():
+                if not results:
                     continue
 
-                topic_id = COMBINATION_ROUTING[canon]
+                # ===== Step 5.1：系统层状态更新（所有成立 combo，都要更新）=====
+                for combo, _ in results:
+                    canon = canonical_combo(combo)
+                    self.state.latest_combo_state[(event2.symbol, side)][canon] = {
+                        "active": True,
+                        "last_pushed_ts": event2.ts,   # 实际语义：last_seen_ts（系统层）
+                        "max_iv": canon[0],
+                    }
 
-                # 5.1 构建 snapshot（纯计算）
-                sig_str = f"{side.value}|{'|'.join(canon)}"
-                signature = hashlib.md5(sig_str.encode("utf-8")).hexdigest()
+                # ===== Step 5.2：topic 内取大（dominance 过滤，仅影响展示）=====
+                combos = [combo for combo, _ in results]
+                suppressed: set[tuple[str, ...]] = set()
 
-                snap = ResonanceSnapshot(
-                    symbol=event2.symbol,
-                    side=side,
-                    ts=event2.ts,
-                    states=states,
-                    score=len(canon),
-                    signature=signature,
-                )
+                for base in combos:
+                    base_set = set(base)
+                    for higher in combos:
+                        if base == higher:
+                            continue
+                        if base_set < set(higher):
+                            suppressed.add(base)
+                            break
 
-                msg_prefix = "‼️升级‼️" if is_upgrade else ""
-                msg = f"{msg_prefix}\n{ts_to_utc_str(event.ts)}\n {format_message(snap, list(canon))}"
+                visible_results = [
+                    (combo, is_upgrade)
+                    for combo, is_upgrade in results
+                    if combo not in suppressed
+                ]
 
-                # ====== 关键点 1：先更新 state（串行、确定性） ======
-                self.state.last_active_combo[key] = canon
+                if not visible_results:
+                    continue
 
-                self.state.latest_combo_state[(event2.symbol, side)][canon] = {
-                    "active": True,
-                    "last_pushed_ts": event2.ts,
-                    "max_iv": canon[0],
-                }
+                # ===== Step 5.3：仅对可见 combo，更新代表状态并收集推送任务 =====
+                for combo, is_upgrade in visible_results:
+                    canon = canonical_combo(combo)
+                    key = (event2.symbol, side, max_iv)
 
-                logger.warning(
-                    f"[推送] {event2.symbol}-{side} combo={canon} "
-                    f"{'UPGRADE' if is_upgrade else 'NEW'}"
-                )
+                    # 代表 combo（展示层）
+                    self.state.last_active_combo[key] = canon
 
-                # ====== 关键点 2：只把 send 动作收集起来 ======
-                send_tasks.append(
-                    self.tg.send_message(
-                        chat_id=settings.TG_CHAT_ID,
-                        text=msg,
-                        message_thread_id=topic_id,
+                    # routing 防御
+                    if canon not in COMBINATION_ROUTING:
+                        logger.warning(f"未定义 routing topic 的组合 {canon} 被跳过")
+                        continue
+
+                    topic_id = COMBINATION_ROUTING[canon]
+
+                    # 构建消息
+                    sig_str = f"{side.value}|{'|'.join(canon)}"
+                    signature = hashlib.md5(sig_str.encode("utf-8")).hexdigest()
+
+                    snap = ResonanceSnapshot(
+                        symbol=event2.symbol,
+                        side=side,
+                        ts=event2.ts,
+                        states=states,
+                        score=len(canon),
+                        signature=signature,
                     )
-                )
 
-            # ====== 关键点 3：for 循环结束后，并发执行外部 IO ======
+                    msg_prefix = "‼️升级‼️" if is_upgrade else ""
+                    msg = (
+                        f"{msg_prefix}\n"
+                        f"{ts_to_utc_str(event2.ts)}\n"
+                        f"{format_message(snap, list(canon))}"
+                    )
+
+                    logger.warning(
+                        f"[推送] {event2.symbol}-{side} combo={canon} "
+                        f"{'UPGRADE' if is_upgrade else 'NEW'}"
+                    )
+
+                    send_tasks.append(
+                        self.tg.send_message(
+                            chat_id=settings.TG_CHAT_ID,
+                            text=msg,
+                            message_thread_id=topic_id,
+                        )
+                    )
+
+            # ===== Step 5.4：统一并发执行外部 IO =====
             if send_tasks:
                 await asyncio.gather(*send_tasks, return_exceptions=True)
-
-            # for combo, is_upgrade in combo_results:
-            #     canon = canonical_combo(combo)
-            #     key = (event2.symbol, side, canon[0])
-
-            #     # 5.0 防御：必须有 routing
-            #     if canon not in COMBINATION_ROUTING:
-            #         logger.warning(f"未定义 routing topic 的组合 {canon} 被跳过")
-            #         continue
-
-            #     topic_id = COMBINATION_ROUTING[canon]
-
-            #     # 5.1 构建 snapshot
-            #     sig_str = f"{side.value}|{'|'.join(canon)}"
-            #     signature = hashlib.md5(sig_str.encode("utf-8")).hexdigest()
-
-            #     snap = ResonanceSnapshot(
-            #         symbol=event2.symbol,
-            #         side=side,
-            #         ts=event2.ts,
-            #         states=states,
-            #         score=len(canon),
-            #         signature=signature,
-            #     )
-
-            #     msg_prefix = "[升级]" if is_upgrade else ""
-            #     msg = f"{msg_prefix}\n{ts_to_utc_str(event.ts)}\n {format_message(snap, list(canon))}"
-
-            #     # 5.2 推送
-            #     await self.tg.send_message(
-            #         chat_id=settings.TG_CHAT_ID,
-            #         text=msg,
-            #         message_thread_id=topic_id,
-            #     )
-
-            #     logger.warning(
-            #         f"[推送] {event2.symbol}-{side} combo={canon} "
-            #         f"{'UPGRADE' if is_upgrade else 'NEW'}"
-            #     )
-
-            #     self.state.last_active_combo[key] = canon
-
-
-            #     # 5.3 推送成功后，**唯一一次** 更新 combo 状态
-            #     self.state.latest_combo_state[(event2.symbol, side)][canon] = {
-            #         "active": True,
-            #         "last_pushed_ts": event2.ts,
-            #         "max_iv": canon[0],
-            #     }

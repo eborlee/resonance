@@ -8,11 +8,11 @@ from ..domain.models import LevelState, IntervalState
 ALLOWED_COMBINATIONS = [
     ("4h", "1h"),
     ("4h", "1h", "15m"),
-    ("4h", "15m"),
+    # ("4h", "15m"),
 
     ("1h", "15m"),
     ("1h", "15m", "3m"),
-    ("1h", "3m"),
+    # ("1h", "3m"),
 
     ("15m", "3m"),
     
