@@ -68,3 +68,18 @@ symbols:
 
   LTCUSDT:
     intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
+
+  CHZUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
+
+  SEIUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
+
+  JASMYUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
+
+  JUPUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
+  
+  BONKUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
