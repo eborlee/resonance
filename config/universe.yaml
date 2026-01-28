@@ -83,3 +83,9 @@ symbols:
   
   BONKUSDT:
     intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
+
+  XAUUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
+
+  XAGUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
