@@ -54,7 +54,6 @@ async def health():
 
 @app.post("/webhook/tradingview")
 async def tradingview_webhook(req: Request):
-    logger.info(req)
     try:
         payload = await req.json()
         event = parse_tv_payload(payload)
@@ -69,6 +68,6 @@ async def tradingview_webhook(req: Request):
     except Exception as e:
         # JSON / parse 失败 -> fallback 到文本
         # 注意：这里不要再做业务判断，交给 svc
-        logger.info("解析失败json")
+        # logger.info("解析失败json")
         await svc.handle_raw_text_fallback(req, err=e)
         return {"ok": True, "fallback": True}

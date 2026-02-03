@@ -341,7 +341,7 @@ class ResonanceService:
         if err is not None:
             logger.warning(
                 "tv json parse failed, fallback to text",
-                exc_info=True,
+                exc_info=False,
             )
 
         try:
