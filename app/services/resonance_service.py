@@ -1,6 +1,7 @@
 from __future__ import annotations
 import asyncio
 import hashlib
+from fastapi import Request
 from typing import List, Dict
 from .resonance_combinations import canonical_combo, match_combinations_with_lifecycle, COMBINATION_ROUTING
 from .resonance_combinations import ALLOWED_COMBINATIONS
@@ -334,3 +335,36 @@ class ResonanceService:
             # ===== Step 5.4：统一并发执行外部 IO =====
             if send_tasks:
                 await asyncio.gather(*send_tasks, return_exceptions=True)
+
+    
+    async def handle_raw_text_fallback(self, req: Request, err: Exception | None = None) -> None:
+        if err is not None:
+            logger.warning(
+                "tv json parse failed, fallback to text",
+                exc_info=True,
+            )
+
+        try:
+            body = await req.body()
+            text = body.decode("utf-8", errors="replace").strip()
+        except Exception as e:
+            logger.error("read/decode tv body failed", exc_info=True)
+            return
+
+        if not text:
+            return
+
+        if "穿过" not in text:
+            logger.info("tv text ignored: %s", text[:200])
+            return
+
+        try:
+            await self.tg.send_message(
+                chat_id=settings.TG_CHAT_ID,
+                text=text,
+                message_thread_id=settings.TG_TOPIC_PRICE,
+            )
+            logger.info("tv cross text routed to topic %s", settings.TG_TOPIC_CROSS)
+        except Exception:
+            logger.error("send cross text failed", exc_info=True)
+

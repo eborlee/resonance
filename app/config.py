@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     TG_TOPIC_4H: int
     TG_TOPIC_1H: int
     TG_TOPIC_15MIN: int
+    TG_TOPIC_PRICE: int
 
     # Thresholds
     OB_LEVEL: float = 40.0

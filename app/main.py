@@ -54,12 +54,19 @@ async def health():
 
 @app.post("/webhook/tradingview")
 async def tradingview_webhook(req: Request):
-    payload = await req.json()
-    event = parse_tv_payload(payload)
+    try:
+        payload = await req.json()
+        event = parse_tv_payload(payload)
 
-    # parser 可能产生空 signals（无法识别 interval/value），直接 ack，避免 TV 重试
-    if not event.signals:
-        return {"ok": True, "ignored": True}
+        # parser 可能产生空 signals（无法识别 interval/value），直接 ack，避免 TV 重试
+        if not event.signals:
+            return {"ok": True, "ignored": True}
 
-    await svc.handle_event(event)
-    return {"ok": True}
+        await svc.handle_event(event)
+        return {"ok": True}
+
+    except Exception as e:
+        # JSON / parse 失败 -> fallback 到文本
+        # 注意：这里不要再做业务判断，交给 svc
+        await svc.handle_raw_text_fallback(req, err=e)
+        return {"ok": True, "fallback": True}
