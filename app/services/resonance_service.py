@@ -364,7 +364,7 @@ class ResonanceService:
                 text=text,
                 message_thread_id=settings.TG_TOPIC_PRICE,
             )
-            logger.info("tv cross text routed to topic %s", settings.TG_TOPIC_CROSS)
+            logger.info("tv cross text routed to topic %s", settings.TG_TOPIC_PRICE)
         except Exception:
             logger.error("send cross text failed", exc_info=True)
 
