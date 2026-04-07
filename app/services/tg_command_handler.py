@@ -95,17 +95,19 @@ def _parse_command(text: str):
     return cmd, arg
 
 
-async def _process_update(update: dict, state: AppState, tg: TelegramClient, allowed_chat_id: str) -> None:
+async def _process_update(update: dict, state: AppState, tg: TelegramClient, owner_chat_id: str) -> None:
     msg = update.get("message")
     if not msg:
         return
 
-    chat_id = str(msg.get("chat", {}).get("id", ""))
+    chat = msg.get("chat", {})
+    chat_id = str(chat.get("id", ""))
+    chat_type = chat.get("type", "")
     text = msg.get("text", "")
 
-    # 只响应授权的 chat
-    if chat_id != str(allowed_chat_id):
-        logger.debug(f"忽略非授权 chat_id: {chat_id}")
+    # 只响应私聊 + 授权 owner
+    if chat_type != "private" or chat_id != str(owner_chat_id):
+        logger.debug(f"忽略非授权消息 chat_id={chat_id} type={chat_type}")
         return
 
     cmd, arg = _parse_command(text)
@@ -147,9 +149,26 @@ async def _process_update(update: dict, state: AppState, tg: TelegramClient, all
         logger.error("命令回复发送失败", exc_info=True)
 
 
-async def polling_loop(state: AppState, tg: TelegramClient, allowed_chat_id: str) -> None:
+COMMAND_MENU = [
+    {"command": "cache",    "description": "查询品种各周期缓存状态，如 /cache BTCUSDT"},
+    {"command": "combo",    "description": "查询当前 active 共振组合，如 /combo ETHUSDT"},
+    {"command": "zone",     "description": "查询 zone 触及 warm 状态，如 /zone BTCUSDT"},
+    {"command": "universe", "description": "列出所有监控品种"},
+    {"command": "help",     "description": "查看命令列表"},
+]
+
+
+async def polling_loop(state: AppState, tg: TelegramClient, owner_chat_id: str) -> None:
     """后台 long-polling 循环，与 FastAPI 共用 asyncio 事件循环。"""
     logger.info("TG command polling 启动")
+
+    # 注册命令菜单
+    try:
+        await tg.set_my_commands(COMMAND_MENU)
+        logger.info("TG 命令菜单注册成功")
+    except Exception:
+        logger.warning("TG 命令菜单注册失败", exc_info=True)
+
     offset: int | None = None
 
     while True:
@@ -157,7 +176,7 @@ async def polling_loop(state: AppState, tg: TelegramClient, allowed_chat_id: str
             updates = await tg.get_updates(offset=offset, timeout=20)
             for update in updates:
                 offset = update["update_id"] + 1
-                await _process_update(update, state, tg, allowed_chat_id)
+                await _process_update(update, state, tg, owner_chat_id)
         except asyncio.CancelledError:
             logger.info("TG command polling 停止")
             return

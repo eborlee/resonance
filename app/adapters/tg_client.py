@@ -26,3 +26,13 @@ class TelegramClient:
             r = await client.get(f"{self.base}/getUpdates", params=params)
             r.raise_for_status()
             return r.json().get("result", [])
+
+    async def set_my_commands(self, commands: List[Dict[str, str]]) -> None:
+        """注册 bot 命令菜单（私聊范围）"""
+        payload = {
+            "commands": commands,
+            "scope": {"type": "all_private_chats"},
+        }
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.post(f"{self.base}/setMyCommands", json=payload)
+            r.raise_for_status()

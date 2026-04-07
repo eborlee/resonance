@@ -53,7 +53,7 @@ zone_svc = ZoneService(state=state, tg=tg)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     task = asyncio.create_task(
-        polling_loop(state=state, tg=tg, allowed_chat_id=settings.TG_CHAT_ID)
+        polling_loop(state=state, tg=tg, owner_chat_id=settings.TG_OWNER_CHAT_ID)
     )
     yield
     task.cancel()

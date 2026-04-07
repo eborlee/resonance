@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     # Telegram
     TG_BOT_TOKEN: str
     TG_CHAT_ID: str
+    TG_OWNER_CHAT_ID: str  # 机器人命令交互的个人私聊 chat_id
 
     # 你新的 topic 分层（按最大周期路由）
     TG_TOPIC_WEEK: int
