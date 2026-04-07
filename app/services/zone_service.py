@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 import logging
 from typing import List, Tuple
 
@@ -9,7 +8,7 @@ from ..domain.models import ZoneEvent, Side, LevelState
 from ..infra.store import AppState
 from ..adapters.tg_client import TelegramClient
 from ..infra.utils import ts_to_utc_str
-from .zone_rules import ZONE_RULES, ZONE_INTERVAL_TO_TOPIC_ATTR, ROLE_TO_SIDE
+from .zone_rules import ZONE_RULES, ZONE_INTERVAL_TO_TOPIC_ATTR
 
 logger = logging.getLogger(__name__)
 
@@ -34,27 +33,27 @@ def _get_obos_state(state: AppState, symbol: str, interval: str, side: Side, now
     return LevelState.OUT
 
 
-def _format_zone_message(event: ZoneEvent, matched: List[Tuple[str, str, LevelState]]) -> str:
+def _format_zone_message(event: ZoneEvent, matched: List[Tuple[str, str, Side, LevelState]]) -> str:
     """
-    matched: [(zone_interval, obos_interval, obos_state), ...]
+    matched: [(zone_interval, obos_interval, side, obos_state), ...]
 
     示例输出：
-    📍 BTCUSDT 支撑触及
+    📍 BTCUSDT 区域触及 (R)
     2026-04-07 08:00 UTC
-    区域: 69435.1 - 69478.0 (S) | 1h
+    区域: 69435.1 - 69478.0 | 4h
     配合:
-    - 1h 超卖 IN
+    - 1h 超买 IN
     - 15m 超卖 WARM
     """
-    role_label = "阻力触及" if event.role == "R" else "支撑触及"
+    role_label = "阻力" if event.role == "R" else "支撑"
     lines = [
-        f"📍 {event.symbol} {role_label}",
+        f"📍 {event.symbol} {role_label}区域触及",
         ts_to_utc_str(event.ts),
         f"区域: {event.bot} - {event.top} ({event.role}) | {event.interval}",
         "配合:",
     ]
-    for _, obos_iv, obos_state in matched:
-        side_label = "超买" if event.role == "R" else "超卖"
+    for _, obos_iv, side, obos_state in matched:
+        side_label = "超买" if side == Side.OVERBOUGHT else "超卖"
         lines.append(f"- {obos_iv} {side_label} {obos_state.value.upper()}")
     return "\n".join(lines)
 
@@ -73,9 +72,8 @@ class ZoneService:
             logger.warning(f"Zone事件的symbol不在universe: {event.symbol}")
             return
 
-        # Step 2：role → side 映射，不匹配则跳过
-        side = ROLE_TO_SIDE.get(event.role)
-        if side is None:
+        # Step 2：role 字段仅做校验，不参与方向匹配
+        if event.role not in ("R", "S"):
             logger.warning(f"未知role: {event.role}")
             return
 
@@ -89,19 +87,18 @@ class ZoneService:
 
         now_ts = event.ts
 
-        # Step 4：匹配规则
-        matched: List[Tuple[str, str, LevelState]] = []
+        # Step 4：匹配规则——对每条规则同时查超买和超卖两个方向
+        matched: List[Tuple[str, str, Side, LevelState]] = []
         for zone_iv, obos_iv in ZONE_RULES:
             if zone_iv != event.interval:
                 continue
             if obos_iv not in allowed_intervals:
                 continue
 
-            obos_state = _get_obos_state(self.state, event.symbol, obos_iv, side, now_ts)
-            if obos_state == LevelState.OUT:
-                continue
-
-            matched.append((zone_iv, obos_iv, obos_state))
+            for side in (Side.OVERBOUGHT, Side.OVERSOLD):
+                obos_state = _get_obos_state(self.state, event.symbol, obos_iv, side, now_ts)
+                if obos_state != LevelState.OUT:
+                    matched.append((zone_iv, obos_iv, side, obos_state))
 
         if not matched:
             logger.debug(f"Zone事件无匹配规则: {event.symbol} {event.interval} {event.role}")
@@ -116,7 +113,7 @@ class ZoneService:
 
         # Step 6：推送
         msg = _format_zone_message(event, matched)
-        logger.warning(f"[Zone推送] {event.symbol} {event.interval} {event.role} matched={[r[1] for r in matched]}")
+        logger.warning(f"[Zone推送] {event.symbol} {event.interval} {event.role} matched={[(r[1], r[2].value) for r in matched]}")
         await self.tg.send_message(
             chat_id=settings.TG_CHAT_ID,
             text=msg,

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from typing import List, Tuple
-from ..domain.models import Side
 
 # (zone_interval, obos_interval)
 ZONE_RULES: List[Tuple[str, str]] = [
@@ -16,9 +15,4 @@ ZONE_RULES: List[Tuple[str, str]] = [
 ZONE_INTERVAL_TO_TOPIC_ATTR: dict[str, str] = {
     "4h": "TG_TOPIC_4H",
     "1h": "TG_TOPIC_1H",
-}
-
-ROLE_TO_SIDE: dict[str, Side] = {
-    "R": Side.OVERBOUGHT,
-    "S": Side.OVERSOLD,
 }
