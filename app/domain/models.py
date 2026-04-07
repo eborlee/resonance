@@ -51,3 +51,14 @@ class ResonanceSnapshot:
     states: Dict[str, IntervalState]  # interval -> state
     score: int
     signature: str
+
+
+@dataclass(frozen=True)
+class ZoneEvent:
+    symbol: str
+    interval: str   # normalized: "1h", "4h"
+    top: float
+    bot: float
+    role: str       # "R"=阻力 / "S"=支撑
+    close: float
+    ts: float

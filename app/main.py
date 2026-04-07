@@ -7,8 +7,9 @@ from .config import settings
 # from .infra.logging import setup_logging
 from .infra.store import AppState
 from .adapters.tg_client import TelegramClient
-from .adapters.tv_parser import parse_tv_payload
+from .adapters.tv_parser import parse_tv_payload, parse_zone_payload
 from .services.resonance_service import ResonanceService
+from .services.zone_service import ZoneService
 import logging
 from .infra.logger_config import setup_logging
 
@@ -45,6 +46,7 @@ state = AppState(
 # Telegram client + 主服务
 tg = TelegramClient(bot_token=settings.TG_BOT_TOKEN)
 svc = ResonanceService(state=state, tg=tg)
+zone_svc = ZoneService(state=state, tg=tg)
 
 
 @app.get("/health")
@@ -56,6 +58,15 @@ async def health():
 async def tradingview_webhook(req: Request):
     try:
         payload = await req.json()
+
+        # zone_interaction 单独分发
+        if payload.get("type") == "zone_interaction":
+            zone_event = parse_zone_payload(payload)
+            if zone_event is None:
+                return {"ok": True, "ignored": True}
+            await zone_svc.handle_event(zone_event)
+            return {"ok": True}
+
         event = parse_tv_payload(payload)
 
         # parser 可能产生空 signals（无法识别 interval/value），直接 ack，避免 TV 重试

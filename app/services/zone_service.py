@@ -1,0 +1,124 @@
+from __future__ import annotations
+
+import time
+import logging
+from typing import List, Tuple
+
+from ..config import settings, get_universe
+from ..domain.models import ZoneEvent, Side, LevelState
+from ..infra.store import AppState
+from ..adapters.tg_client import TelegramClient
+from ..infra.utils import ts_to_utc_str
+from .zone_rules import ZONE_RULES, ZONE_INTERVAL_TO_TOPIC_ATTR, ROLE_TO_SIDE
+
+logger = logging.getLogger(__name__)
+
+
+def _get_obos_state(state: AppState, symbol: str, interval: str, side: Side, now_ts: float) -> LevelState:
+    """读取 cache，返回某周期在指定方向的 IN/WARM/OUT 状态。"""
+    rec = state.cache.get((symbol, interval))
+    if rec is None:
+        return LevelState.OUT
+
+    if side == Side.OVERSOLD:
+        if rec.in_oversold:
+            return LevelState.IN
+        if state.is_warm(symbol, interval, side, now_ts=now_ts):
+            return LevelState.WARM
+    else:
+        if rec.in_overbought:
+            return LevelState.IN
+        if state.is_warm(symbol, interval, side, now_ts=now_ts):
+            return LevelState.WARM
+
+    return LevelState.OUT
+
+
+def _format_zone_message(event: ZoneEvent, matched: List[Tuple[str, str, LevelState]]) -> str:
+    """
+    matched: [(zone_interval, obos_interval, obos_state), ...]
+
+    示例输出：
+    📍 BTCUSDT 支撑触及
+    2026-04-07 08:00 UTC
+    区域: 69435.1 - 69478.0 (S) | 1h
+    配合:
+    - 1h 超卖 IN
+    - 15m 超卖 WARM
+    """
+    role_label = "阻力触及" if event.role == "R" else "支撑触及"
+    lines = [
+        f"📍 {event.symbol} {role_label}",
+        ts_to_utc_str(event.ts),
+        f"区域: {event.bot} - {event.top} ({event.role}) | {event.interval}",
+        "配合:",
+    ]
+    for _, obos_iv, obos_state in matched:
+        side_label = "超买" if event.role == "R" else "超卖"
+        lines.append(f"- {obos_iv} {side_label} {obos_state.value.upper()}")
+    return "\n".join(lines)
+
+
+class ZoneService:
+    def __init__(self, state: AppState, tg: TelegramClient):
+        self.state = state
+        self.tg = tg
+
+    async def handle_event(self, event: ZoneEvent) -> None:
+        logger.info(f"收到Zone事件: {event}")
+
+        # Step 1：universe 过滤
+        allowed_intervals = get_universe().get(event.symbol)
+        if not allowed_intervals:
+            logger.warning(f"Zone事件的symbol不在universe: {event.symbol}")
+            return
+
+        # Step 2：role → side 映射，不匹配则跳过
+        side = ROLE_TO_SIDE.get(event.role)
+        if side is None:
+            logger.warning(f"未知role: {event.role}")
+            return
+
+        # Step 3：更新 zone 触及缓存
+        self.state.update_zone_touch(
+            symbol=event.symbol,
+            interval=event.interval,
+            role=event.role,
+            ts=event.ts,
+        )
+
+        now_ts = event.ts
+
+        # Step 4：匹配规则
+        matched: List[Tuple[str, str, LevelState]] = []
+        for zone_iv, obos_iv in ZONE_RULES:
+            if zone_iv != event.interval:
+                continue
+            if obos_iv not in allowed_intervals:
+                continue
+
+            obos_state = _get_obos_state(self.state, event.symbol, obos_iv, side, now_ts)
+            if obos_state == LevelState.OUT:
+                continue
+
+            matched.append((zone_iv, obos_iv, obos_state))
+
+        if not matched:
+            logger.debug(f"Zone事件无匹配规则: {event.symbol} {event.interval} {event.role}")
+            return
+
+        # Step 5：确定推送 topic
+        topic_attr = ZONE_INTERVAL_TO_TOPIC_ATTR.get(event.interval)
+        if topic_attr is None:
+            logger.warning(f"Zone interval 无对应topic配置: {event.interval}")
+            return
+        topic_id = getattr(settings, topic_attr)
+
+        # Step 6：推送
+        msg = _format_zone_message(event, matched)
+        logger.warning(f"[Zone推送] {event.symbol} {event.interval} {event.role} matched={[r[1] for r in matched]}")
+        await self.tg.send_message(
+            chat_id=settings.TG_CHAT_ID,
+            text=msg,
+            message_thread_id=topic_id,
+        )

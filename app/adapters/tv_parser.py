@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Tuple, Optional
 import time
 import re
 
-from ..domain.models import IntervalSignal, TvEvent
+from ..domain.models import IntervalSignal, TvEvent, ZoneEvent
 
 from datetime import datetime, timezone
 
@@ -169,3 +169,52 @@ def parse_tv_payload(payload: Dict[str, Any]) -> TvEvent:
         signals.append(IntervalSignal(interval=interval, values=(value,)))
 
     return TvEvent(symbol=symbol, ts=ts, signals=signals)
+
+
+def parse_zone_payload(payload: Dict[str, Any]) -> Optional[ZoneEvent]:
+    """
+    解析 zone_interaction 类型的 TV Webhook payload：
+
+    {
+      "type": "zone_interaction",
+      "ticker": "BTCUSDT.P",
+      "interval": "60",
+      "top": 69320,
+      "bot": 69180,
+      "role": "R",
+      "close": 68370
+    }
+
+    返回 ZoneEvent，任意关键字段缺失则返回 None。
+    """
+    raw_symbol = payload.get("ticker") or payload.get("symbol") or ""
+    symbol = normalize_symbol(str(raw_symbol))
+    if not symbol:
+        return None
+
+    interval = map_interval(payload.get("interval"))
+    if interval is None:
+        return None
+
+    try:
+        top = float(payload["top"])
+        bot = float(payload["bot"])
+        close = float(payload["close"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+    role = str(payload.get("role", "")).strip().upper()
+    if role not in ("R", "S"):
+        return None
+
+    ts = parse_ts(payload.get("ts"))
+
+    return ZoneEvent(
+        symbol=symbol,
+        interval=interval,
+        top=top,
+        bot=bot,
+        role=role,
+        close=close,
+        ts=ts,
+    )

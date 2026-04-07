@@ -79,6 +79,9 @@ class AppState:
         }
         """
 
+        # zone 触及缓存：记录每个 (symbol, interval, role) 最近一次触及的时间戳
+        self.zone_touch_cache: Dict[Tuple[str, str, str], float] = {}
+
     # =========================================================
     # 更新某个周期的状态，同时记录“是否刚离开 IN”
     # =========================================================
@@ -170,6 +173,21 @@ class AppState:
         # logger.debug(f"当前时间戳距离上次离开区间的秒数{now_ts-exit_ts}, 该窗口的warm秒数：{warm_k * candle_sec}")
         # logger.debug(f"当前时间戳距离上次离开的蜡烛数{(now_ts-exit_ts)/candle_sec}")
         return (now_ts - exit_ts) < warm_k * candle_sec
+
+    # =========================================================
+    # Zone 触及状态管理
+    # =========================================================
+    def update_zone_touch(self, symbol: str, interval: str, role: str, ts: float) -> None:
+        self.zone_touch_cache[(symbol, interval, role)] = ts
+
+    def is_zone_warm(self, symbol: str, interval: str, role: str, now_ts: float) -> bool:
+        touch_ts = self.zone_touch_cache.get((symbol, interval, role))
+        if touch_ts is None:
+            return False
+        candle_sec = self.interval_seconds.get(interval)
+        if candle_sec is None:
+            return False
+        return (now_ts - touch_ts) < 2 * candle_sec
 
     # =========================================================
     # 推送门控（与 warm 无关，无需改）
