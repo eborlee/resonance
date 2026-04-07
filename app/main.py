@@ -1,20 +1,21 @@
 from __future__ import annotations
 
+import asyncio
 import os
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 
 from .config import settings
-# from .infra.logging import setup_logging
 from .infra.store import AppState
 from .adapters.tg_client import TelegramClient
 from .adapters.tv_parser import parse_tv_payload, parse_zone_payload
 from .services.resonance_service import ResonanceService
 from .services.zone_service import ZoneService
+from .services.tg_command_handler import polling_loop
 import logging
 from .infra.logger_config import setup_logging
 
 logger = logging.getLogger(__name__)
-app = FastAPI()
 
 # 确保日志目录存在（最小可运行）
 log_dir = os.path.dirname(settings.LOG_PATH)
@@ -47,6 +48,21 @@ state = AppState(
 tg = TelegramClient(bot_token=settings.TG_BOT_TOKEN)
 svc = ResonanceService(state=state, tg=tg)
 zone_svc = ZoneService(state=state, tg=tg)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(
+        polling_loop(state=state, tg=tg, allowed_chat_id=settings.TG_CHAT_ID)
+    )
+    yield
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+app = FastAPI(lifespan=lifespan)
 
 
 @app.get("/health")

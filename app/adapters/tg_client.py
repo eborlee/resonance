@@ -1,5 +1,6 @@
 from __future__ import annotations
 import httpx
+from typing import List, Dict, Any
 
 
 class TelegramClient:
@@ -15,3 +16,13 @@ class TelegramClient:
             r = await client.post(f"{self.base}/sendMessage", json=payload)
             r.raise_for_status()
             return r.json()
+
+    async def get_updates(self, offset: int | None = None, timeout: int = 20) -> List[Dict[str, Any]]:
+        params: Dict[str, Any] = {"timeout": timeout, "allowed_updates": ["message"]}
+        if offset is not None:
+            params["offset"] = offset
+
+        async with httpx.AsyncClient(timeout=timeout + 5.0) as client:
+            r = await client.get(f"{self.base}/getUpdates", params=params)
+            r.raise_for_status()
+            return r.json().get("result", [])
