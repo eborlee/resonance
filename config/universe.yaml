@@ -1,7 +1,7 @@
 # 监控的币种及其纳入考量的时间窗口
 symbols:
   BTCUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s, 1m]
 
   ETHUSDT:
     intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]

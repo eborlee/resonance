@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import List, Tuple
 
@@ -87,7 +88,7 @@ class ZoneService:
 
         now_ts = event.ts
 
-        # Step 4：匹配规则——对每条规则同时查超买和超卖两个方向
+        # Step 5：匹配规则——对每条规则同时查超买和超卖两个方向
         matched: List[Tuple[str, str, Side, LevelState]] = []
         for zone_iv, obos_iv in ZONE_RULES:
             if zone_iv != event.interval:
@@ -97,11 +98,12 @@ class ZoneService:
 
             for side in (Side.OVERBOUGHT, Side.OVERSOLD):
                 obos_state = _get_obos_state(self.state, event.symbol, obos_iv, side, now_ts)
+                logger.warning(f"[Zone匹配] {event.symbol} rule=({zone_iv},{obos_iv}) side={side.value} state={obos_state.value}")
                 if obos_state != LevelState.OUT:
                     matched.append((zone_iv, obos_iv, side, obos_state))
 
         if not matched:
-            logger.debug(f"Zone事件无匹配规则: {event.symbol} {event.interval} {event.role}")
+            logger.warning(f"Zone事件无匹配规则: {event.symbol} {event.interval} {event.role} cache_keys={list(self.state.cache.keys())}")
             return
 
         # Step 5：确定推送 topic
