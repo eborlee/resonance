@@ -207,7 +207,9 @@ def parse_zone_payload(payload: Dict[str, Any]) -> Optional[ZoneEvent]:
     if role not in ("R", "S"):
         return None
 
-    ts = parse_ts(payload.get("ts"))
+    # Pine Script 的 timenow 是毫秒级整数（13位），转换为秒
+    raw_ts = payload.get("ts")
+    ts = float(raw_ts) / 1000 if raw_ts is not None else time.time()
 
     return ZoneEvent(
         symbol=symbol,
