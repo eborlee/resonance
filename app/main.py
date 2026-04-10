@@ -74,15 +74,22 @@ async def health():
 async def tradingview_webhook(req: Request):
     try:
         payload = await req.json()
+    except Exception as e:
+        await svc.handle_raw_text_fallback(req, err=e)
+        return {"ok": True, "fallback": True}
 
-        # zone_interaction 单独分发
-        if payload.get("type") == "zone_interaction":
+    # zone_interaction 单独分发（独立异常处理，不走 fallback）
+    if payload.get("type") == "zone_interaction":
+        try:
             zone_event = parse_zone_payload(payload)
             if zone_event is None:
                 return {"ok": True, "ignored": True}
             await zone_svc.handle_event(zone_event)
-            return {"ok": True}
+        except Exception:
+            logger.error("zone_service 处理异常", exc_info=True)
+        return {"ok": True}
 
+    try:
         event = parse_tv_payload(payload)
 
         # parser 可能产生空 signals（无法识别 interval/value），直接 ack，避免 TV 重试

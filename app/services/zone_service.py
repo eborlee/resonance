@@ -46,16 +46,16 @@ def _format_zone_message(event: ZoneEvent, matched: List[Tuple[str, str, Side, L
     - 1h 超买 IN
     - 15m 超卖 WARM
     """
-    role_label = "阻力" if event.role == "R" else "支撑"
     lines = [
-        f"📍 {event.symbol} {role_label}区域触及",
+        f"📍 {event.symbol} 关键区域触及",
         ts_to_utc_str(event.ts),
         f"区域: {event.bot} - {event.top} ({event.role}) | {event.interval}",
         "配合:",
     ]
     for _, obos_iv, side, obos_state in matched:
         side_label = "超买" if side == Side.OVERBOUGHT else "超卖"
-        lines.append(f"- {obos_iv} {side_label} {obos_state.value.upper()}")
+        dot = "🔴" if side == Side.OVERBOUGHT else "🟢"
+        lines.append(f"{dot} {obos_iv} {side_label} {obos_state.value.upper()}")
     return "\n".join(lines)
 
 

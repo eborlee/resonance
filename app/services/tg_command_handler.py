@@ -5,6 +5,8 @@ import logging
 import time
 from typing import List
 
+import yaml
+
 from ..config import settings, get_universe
 from ..domain.models import Side, LevelState
 from ..infra.store import AppState
@@ -12,10 +14,13 @@ from ..adapters.tg_client import TelegramClient
 
 logger = logging.getLogger(__name__)
 
-COMMANDS = """/cache <symbol>  — 各周期 IN/WARM/OUT 状态
-/combo <symbol>  — 当前 active 共振组合
-/zone <symbol>   — zone 触及 warm 状态
-/universe        — 所有监控品种"""
+COMMANDS = """/cache <symbol>   — 各周期 IN/WARM/OUT 状态
+/combo <symbol>   — 当前 active 共振组合
+/zone <symbol>    — zone 触及 warm 状态
+/check <symbol>   — 查询品种是否在 universe 中
+/add <symbol>     — 添加品种到 universe
+/remove <symbol>  — 从 universe 移除品种
+/universe         — 所有监控品种"""
 
 
 def _handle_cache(state: AppState, symbol: str, now_ts: float) -> str:
@@ -77,6 +82,76 @@ def _handle_zone(state: AppState, symbol: str, now_ts: float) -> str:
     return "\n".join(lines)
 
 
+class _FlowSeqDumper(yaml.Dumper):
+    pass
+
+_FlowSeqDumper.add_representer(
+    list,
+    lambda dumper, data: dumper.represent_sequence(
+        "tag:yaml.org,2002:seq", data, flow_style=True
+    ),
+)
+
+
+def _write_universe(raw: dict) -> None:
+    with open(settings.UNIVERSE_PATH, "w", encoding="utf-8") as f:
+        yaml.dump(raw, f, Dumper=_FlowSeqDumper, allow_unicode=True, default_flow_style=False)
+
+
+def _handle_add(symbol: str) -> str:
+    symbol = symbol.upper()
+    with open(settings.UNIVERSE_PATH, "r", encoding="utf-8") as f:
+        raw = yaml.safe_load(f)
+
+    symbols: dict = raw.get("symbols", {})
+    if symbol in symbols:
+        return f"⚠️ {symbol} 已在 universe 中"
+
+    all_intervals: set = set()
+    for cfg in symbols.values():
+        for iv in cfg.get("intervals", []):
+            all_intervals.add(str(iv))
+
+    interval_seconds = settings.INTERVAL_SECONDS
+    sorted_intervals = sorted(
+        all_intervals,
+        key=lambda iv: interval_seconds.get(iv, 0),
+        reverse=True,
+    )
+
+    symbols[symbol] = {"intervals": sorted_intervals}
+    raw["symbols"] = symbols
+    _write_universe(raw)
+
+    return f"✅ 已添加 {symbol}\n  周期: {', '.join(sorted_intervals)}"
+
+
+def _handle_remove(symbol: str) -> str:
+    symbol = symbol.upper()
+    with open(settings.UNIVERSE_PATH, "r", encoding="utf-8") as f:
+        raw = yaml.safe_load(f)
+
+    symbols: dict = raw.get("symbols", {})
+    if symbol not in symbols:
+        return f"❌ {symbol} 不在 universe 中"
+
+    del symbols[symbol]
+    raw["symbols"] = symbols
+    _write_universe(raw)
+
+    return f"✅ 已从 universe 移除 {symbol}"
+
+
+def _handle_check(symbol: str) -> str:
+    uni = get_universe()
+    symbol = symbol.upper()
+    intervals = uni.get(symbol)
+    if intervals:
+        return f"✅ {symbol} 在 universe 中\n  周期: {', '.join(intervals)}"
+    else:
+        return f"❌ {symbol} 不在 universe 中"
+
+
 def _handle_universe() -> str:
     uni = get_universe()
     lines = [f"🌐 监控品种（{len(uni)}个）"]
@@ -134,6 +209,24 @@ async def _process_update(update: dict, state: AppState, tg: TelegramClient, own
         else:
             reply = _handle_zone(state, arg, now_ts)
 
+    elif cmd == "/check":
+        if not arg:
+            reply = "用法: /check <symbol>，例如 /check BTCUSDT"
+        else:
+            reply = _handle_check(arg)
+
+    elif cmd == "/add":
+        if not arg:
+            reply = "用法: /add <symbol>，例如 /add SOLUSDT"
+        else:
+            reply = _handle_add(arg)
+
+    elif cmd == "/remove":
+        if not arg:
+            reply = "用法: /remove <symbol>，例如 /remove SOLUSDT"
+        else:
+            reply = _handle_remove(arg)
+
     elif cmd == "/universe":
         reply = _handle_universe()
 
@@ -153,6 +246,9 @@ COMMAND_MENU = [
     {"command": "cache",    "description": "查询品种各周期缓存状态，如 /cache BTCUSDT"},
     {"command": "combo",    "description": "查询当前 active 共振组合，如 /combo ETHUSDT"},
     {"command": "zone",     "description": "查询 zone 触及 warm 状态，如 /zone BTCUSDT"},
+    {"command": "check",    "description": "查询品种是否在 universe 中，如 /check BTCUSDT"},
+    {"command": "add",      "description": "添加品种到 universe，如 /add SOLUSDT"},
+    {"command": "remove",   "description": "从 universe 移除品种，如 /remove SOLUSDT"},
     {"command": "universe", "description": "列出所有监控品种"},
     {"command": "help",     "description": "查看命令列表"},
 ]
