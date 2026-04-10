@@ -93,24 +93,30 @@ _FlowSeqDumper.add_representer(
 )
 
 
-def _write_universe(raw: dict) -> None:
-    with open(settings.UNIVERSE_PATH, "w", encoding="utf-8") as f:
+def _write_local_universe(raw: dict) -> None:
+    with open(settings.UNIVERSE_LOCAL_PATH, "w", encoding="utf-8") as f:
         yaml.dump(raw, f, Dumper=_FlowSeqDumper, allow_unicode=True, default_flow_style=False)
+
+
+def _load_local_raw() -> dict:
+    import os
+    if os.path.exists(settings.UNIVERSE_LOCAL_PATH):
+        with open(settings.UNIVERSE_LOCAL_PATH, "r", encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    return {}
 
 
 def _handle_add(symbol: str) -> str:
     symbol = symbol.upper()
-    with open(settings.UNIVERSE_PATH, "r", encoding="utf-8") as f:
-        raw = yaml.safe_load(f)
 
-    symbols: dict = raw.get("symbols", {})
-    if symbol in symbols:
+    # 检查是否已在 universe（base 或 local）
+    if symbol in get_universe():
         return f"⚠️ {symbol} 已在 universe 中"
 
+    # 取全量品种的周期并集作为新品种的周期
     all_intervals: set = set()
-    for cfg in symbols.values():
-        for iv in cfg.get("intervals", []):
-            all_intervals.add(str(iv))
+    for intervals in get_universe().values():
+        all_intervals.update(intervals)
 
     interval_seconds = settings.INTERVAL_SECONDS
     sorted_intervals = sorted(
@@ -119,25 +125,30 @@ def _handle_add(symbol: str) -> str:
         reverse=True,
     )
 
+    local_raw = _load_local_raw()
+    symbols: dict = local_raw.get("symbols", {})
     symbols[symbol] = {"intervals": sorted_intervals}
-    raw["symbols"] = symbols
-    _write_universe(raw)
+    local_raw["symbols"] = symbols
+    _write_local_universe(local_raw)
 
     return f"✅ 已添加 {symbol}\n  周期: {', '.join(sorted_intervals)}"
 
 
 def _handle_remove(symbol: str) -> str:
     symbol = symbol.upper()
-    with open(settings.UNIVERSE_PATH, "r", encoding="utf-8") as f:
-        raw = yaml.safe_load(f)
 
-    symbols: dict = raw.get("symbols", {})
+    # 只能移除 local 文件里的品种
+    local_raw = _load_local_raw()
+    symbols: dict = local_raw.get("symbols", {})
+
     if symbol not in symbols:
+        if symbol in get_universe():
+            return f"⚠️ {symbol} 在 base universe.yaml 中，无法通过命令移除"
         return f"❌ {symbol} 不在 universe 中"
 
     del symbols[symbol]
-    raw["symbols"] = symbols
-    _write_universe(raw)
+    local_raw["symbols"] = symbols
+    _write_local_universe(local_raw)
 
     return f"✅ 已从 universe 移除 {symbol}"
 

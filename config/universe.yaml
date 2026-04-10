@@ -1,106 +1,79 @@
-# 监控的币种及其纳入考量的时间窗口
 symbols:
+  AAVEUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  ALGOUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  ARBUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  ASTERUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  AVAXUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  BCHUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  BGBUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  BNBUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  BONKUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
   BTCUSDT:
     intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s, 1m]
-
-  ETHUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
-  SOLUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-  
-  AAVEUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
-  FARTCOINUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
-  OKBUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
-  BNBUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
-  ENAUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
-  JTOUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
-  XRPUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
-  LINKUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-  
-  HYPEUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
-  DOGEUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
-  PENGUUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
-  BGBUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
-  ZECUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
-  DASHUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
-  ASTERUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
-  SUIUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
-  AVAXUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
-  RAYUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-  
-  BCHUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
-  LTCUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
   CHZUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
-  SEIUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
-  JASMYUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
-  JUPUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-  
-  BONKUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
-  XAUUSD:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
-  XAGUSD:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
-  ALGOUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
-  THETAUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
-  VETUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
-  QNTUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
-
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  DASHUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  DOGEUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  ENAUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  ETHUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  FARTCOINUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
   FETUSDT:
-    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m,30s]
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  HYPEUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  JASMYUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  JTOUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  JUPUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  LINKUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  LTCUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  OKBUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  OPUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 1m, 30s]
+  ORCL:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 1m, 30s]
+  PENGUUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  QNTUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  RAYUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  RENDERUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  SEIUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  SILVER:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  SOLUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  SUIUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  THETAUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  VETUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  XAUUSD:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  XRPUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
+  ZECUSDT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]

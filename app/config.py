@@ -35,6 +35,7 @@ class Settings(BaseSettings):
 
     # Config paths
     UNIVERSE_PATH: str = "config/universe.yaml"
+    UNIVERSE_LOCAL_PATH: str = "config/universe.local.yaml"
     ROUTING_PATH: str = "config/routing.yaml"
 
     # Logging
@@ -75,7 +76,19 @@ class Settings(BaseSettings):
         extra = "ignore"
 
 
-def load_universe(path: str) -> Dict[str, List[str]]:
+def _parse_symbols(raw: dict) -> Dict[str, List[str]]:
+    out: Dict[str, List[str]] = {}
+    for symbol, cfg in (raw.get("symbols") or {}).items():
+        if not isinstance(cfg, dict):
+            continue
+        intervals = cfg.get("intervals", [])
+        if not intervals:
+            continue
+        out[str(symbol)] = [str(iv) for iv in intervals]
+    return out
+
+
+def load_universe(path: str, local_path: str | None = None) -> Dict[str, List[str]]:
     if not os.path.exists(path):
         raise FileNotFoundError(f"universe config not found: {path}")
 
@@ -85,14 +98,13 @@ def load_universe(path: str) -> Dict[str, List[str]]:
     if not raw or "symbols" not in raw:
         raise ValueError("universe.yaml missing 'symbols' field")
 
-    out: Dict[str, List[str]] = {}
-    for symbol, cfg in raw["symbols"].items():
-        if not isinstance(cfg, dict):
-            continue
-        intervals = cfg.get("intervals", [])
-        if not intervals:
-            continue
-        out[str(symbol)] = [str(iv) for iv in intervals]
+    out = _parse_symbols(raw)
+
+    # 合并 local 文件（存在才读，不存在不报错）
+    if local_path and os.path.exists(local_path):
+        with open(local_path, "r", encoding="utf-8") as f:
+            local_raw = yaml.safe_load(f) or {}
+        out.update(_parse_symbols(local_raw))
 
     if not out:
         raise ValueError("universe.yaml contains no valid symbols")
@@ -146,9 +158,9 @@ def load_routing(path: str) -> Dict[str, Dict[str, str]]:
 
 settings = Settings()
 def get_universe() -> Dict[str, List[str]]:
-    return load_universe(settings.UNIVERSE_PATH)
+    return load_universe(settings.UNIVERSE_PATH, settings.UNIVERSE_LOCAL_PATH)
 
 def get_routing_rules() -> Dict[str, Dict[str, str]]:
     return load_routing(settings.ROUTING_PATH)
-universe = load_universe(settings.UNIVERSE_PATH)
+universe = load_universe(settings.UNIVERSE_PATH, settings.UNIVERSE_LOCAL_PATH)
 routing_rules = load_routing(settings.ROUTING_PATH)

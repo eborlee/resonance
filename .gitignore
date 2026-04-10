@@ -5,6 +5,9 @@ __pycache__/
 *.pyd
 .env
 
+# local universe overrides (server-side only)
+config/universe.local.yaml
+
 # logs / data
 data/
 *.log
