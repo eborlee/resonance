@@ -6,9 +6,10 @@ from typing import List, Tuple
 ZONE_RULES: List[Tuple[str, str]] = [
     ("4h", "4h"),
     ("4h", "1h"),
-    ("4h", "15m"),
+    # ("4h", "15m"),
+    ("1h", "4h"),
     ("1h", "1h"),
-    ("1h", "15m"),
+    # ("1h", "15m"),
     ("1m", "1m"),   # 调试用，便于快速复现问题
 ]
 
