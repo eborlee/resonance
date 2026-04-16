@@ -8,9 +8,10 @@ from fastapi import FastAPI, Request
 from .config import settings
 from .infra.store import AppState
 from .adapters.tg_client import TelegramClient
-from .adapters.tv_parser import parse_tv_payload, parse_zone_payload
+from .adapters.tv_parser import parse_tv_payload, parse_zone_payload, parse_divergence_payload
 from .services.resonance_service import ResonanceService
 from .services.zone_service import ZoneService
+from .services.divergence_service import DivergenceService
 from .services.tg_command_handler import polling_loop
 import logging
 from .infra.logger_config import setup_logging
@@ -48,6 +49,7 @@ state = AppState(
 tg = TelegramClient(bot_token=settings.TG_BOT_TOKEN)
 svc = ResonanceService(state=state, tg=tg)
 zone_svc = ZoneService(state=state, tg=tg)
+divergence_svc = DivergenceService(state=state, tg=tg)
 
 
 @asynccontextmanager
@@ -77,6 +79,17 @@ async def tradingview_webhook(req: Request):
     except Exception as e:
         await svc.handle_raw_text_fallback(req, err=e)
         return {"ok": True, "fallback": True}
+
+    # divergence 单独分发
+    if payload.get("event") == "divergence":
+        try:
+            div_event = parse_divergence_payload(payload)
+            if div_event is None:
+                return {"ok": True, "ignored": True}
+            await divergence_svc.handle_event(div_event)
+        except Exception:
+            logger.error("divergence_service 处理异常", exc_info=True)
+        return {"ok": True}
 
     # zone_interaction 单独分发（独立异常处理，不走 fallback）
     if payload.get("type") == "zone_interaction":

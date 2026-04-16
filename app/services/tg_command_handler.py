@@ -14,13 +14,14 @@ from ..adapters.tg_client import TelegramClient
 
 logger = logging.getLogger(__name__)
 
-COMMANDS = """/cache <symbol>   — 各周期 IN/WARM/OUT 状态
-/combo <symbol>   — 当前 active 共振组合
-/zone <symbol>    — zone 触及 warm 状态
-/check <symbol>   — 查询品种是否在 universe 中
-/add <symbol>     — 添加品种到 universe
-/remove <symbol>  — 从 universe 移除品种
-/universe         — 所有监控品种"""
+COMMANDS = """/cache <symbol>      — 各周期 IN/WARM/OUT 状态
+/combo <symbol>      — 当前 active 共振组合
+/zone <symbol>       — zone 触及 warm 状态
+/divergence <symbol> — 各周期上次背离触发时间
+/check <symbol>      — 查询品种是否在 universe 中
+/add <symbol>        — 添加品种到 universe
+/remove <symbol>     — 从 universe 移除品种
+/universe            — 所有监控品种"""
 
 
 def _handle_cache(state: AppState, symbol: str, now_ts: float) -> str:
@@ -62,6 +63,20 @@ def _handle_combo(state: AppState, symbol: str) -> str:
             lines.append(f"    {'+'.join(combo)}")
     if not found:
         lines.append("  无 active 组合")
+    return "\n".join(lines)
+
+
+def _handle_divergence(state: AppState, symbol: str) -> str:
+    symbol = symbol.upper()
+    lines = [f"📐 {symbol} 背离触发记录"]
+    found = False
+    for (sym, iv), dt_str in state.divergence_cache.items():
+        if sym != symbol:
+            continue
+        found = True
+        lines.append(f"  {iv}: {dt_str} UTC")
+    if not found:
+        lines.append("  无记录")
     return "\n".join(lines)
 
 
@@ -220,6 +235,12 @@ async def _process_update(update: dict, state: AppState, tg: TelegramClient, own
         else:
             reply = _handle_zone(state, arg, now_ts)
 
+    elif cmd == "/divergence":
+        if not arg:
+            reply = "用法: /divergence <symbol>，例如 /divergence BTCUSDT"
+        else:
+            reply = _handle_divergence(state, arg)
+
     elif cmd == "/check":
         if not arg:
             reply = "用法: /check <symbol>，例如 /check BTCUSDT"
@@ -256,7 +277,8 @@ async def _process_update(update: dict, state: AppState, tg: TelegramClient, own
 COMMAND_MENU = [
     {"command": "cache",    "description": "查询品种各周期缓存状态，如 /cache BTCUSDT"},
     {"command": "combo",    "description": "查询当前 active 共振组合，如 /combo ETHUSDT"},
-    {"command": "zone",     "description": "查询 zone 触及 warm 状态，如 /zone BTCUSDT"},
+    {"command": "zone",       "description": "查询 zone 触及 warm 状态，如 /zone BTCUSDT"},
+    {"command": "divergence", "description": "查询各周期上次背离触发时间，如 /divergence BTCUSDT"},
     {"command": "check",    "description": "查询品种是否在 universe 中，如 /check BTCUSDT"},
     {"command": "add",      "description": "添加品种到 universe，如 /add SOLUSDT"},
     {"command": "remove",   "description": "从 universe 移除品种，如 /remove SOLUSDT"},

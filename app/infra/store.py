@@ -82,6 +82,9 @@ class AppState:
         # zone 触及缓存：记录每个 (symbol, interval, role) 最近一次触及的时间戳
         self.zone_touch_cache: Dict[Tuple[str, str, str], float] = {}
 
+        # 背离缓存：记录每个 (symbol, interval) 最近一次触发背离的时间（人可读字符串）
+        self.divergence_cache: Dict[Tuple[str, str], str] = {}
+
     # =========================================================
     # 更新某个周期的状态，同时记录“是否刚离开 IN”
     # =========================================================

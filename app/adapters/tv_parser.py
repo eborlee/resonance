@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Tuple, Optional
 import time
 import re
 
-from ..domain.models import IntervalSignal, TvEvent, ZoneEvent
+from ..domain.models import IntervalSignal, TvEvent, ZoneEvent, DivergenceEvent
 
 from datetime import datetime, timezone
 
@@ -169,6 +169,36 @@ def parse_tv_payload(payload: Dict[str, Any]) -> TvEvent:
         signals.append(IntervalSignal(interval=interval, values=(value,)))
 
     return TvEvent(symbol=symbol, ts=ts, signals=signals)
+
+
+def parse_divergence_payload(payload: Dict[str, Any]) -> Optional[DivergenceEvent]:
+    """
+    解析顶底背离 TV Webhook payload：
+
+    {
+      "symbol": "{{ticker}}",
+      "interval": "{{interval}}",
+      "event": "divergence",
+      "indicator": "波段过滤器",
+      "value": "",
+      "desc": "△触发顶底背离"
+    }
+
+    返回 DivergenceEvent，关键字段缺失则返回 None。
+    """
+    raw_symbol = payload.get("symbol") or payload.get("ticker") or ""
+    symbol = normalize_symbol(str(raw_symbol))
+    if not symbol:
+        return None
+
+    interval = map_interval(payload.get("interval"))
+    if interval is None:
+        return None
+
+    raw_ts = payload.get("timenow") or payload.get("ts")
+    ts = parse_ts(raw_ts)
+
+    return DivergenceEvent(symbol=symbol, interval=interval, ts=ts)
 
 
 def parse_zone_payload(payload: Dict[str, Any]) -> Optional[ZoneEvent]:

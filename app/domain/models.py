@@ -62,3 +62,10 @@ class ZoneEvent:
     role: str       # "R"=阻力 / "S"=支撑
     close: float
     ts: float
+
+
+@dataclass(frozen=True)
+class DivergenceEvent:
+    symbol: str
+    interval: str   # normalized: "1h", "4h"
+    ts: float
