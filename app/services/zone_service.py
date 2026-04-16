@@ -99,7 +99,7 @@ class ZoneService:
             for side in (Side.OVERBOUGHT, Side.OVERSOLD):
                 obos_state = _get_obos_state(self.state, event.symbol, obos_iv, side, now_ts)
                 logger.warning(f"[Zone匹配] {event.symbol} rule=({zone_iv},{obos_iv}) side={side.value} state={obos_state.value}")
-                if obos_state != LevelState.OUT:
+                if obos_state == LevelState.IN:
                     matched.append((zone_iv, obos_iv, side, obos_state))
 
         if not matched:
