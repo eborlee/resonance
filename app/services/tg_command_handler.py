@@ -11,6 +11,7 @@ from ..config import settings, get_universe
 from ..domain.models import Side, LevelState
 from ..infra.store import AppState
 from ..adapters.tg_client import TelegramClient
+from ..infra.utils import ts_to_utc_str
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,27 @@ def _handle_zone(state: AppState, symbol: str, now_ts: float) -> str:
         lines.append(f"  {iv} ({role}): {status} [{elapsed}s 前触及]")
     if not found:
         lines.append("  无触及记录")
+
+    # Zone+OB/OS 组合冷冻状态
+    _COOLDOWN = 4 * 3600
+    lines.append("")
+    lines.append("🧊 Zone+OB/OS 推送冷冻")
+    cooldown_found = False
+    for (sym, zone_iv, obos_iv, side), last_ts in state.zone_combo_last_pushed.items():
+        if sym != symbol:
+            continue
+        cooldown_found = True
+        remaining = _COOLDOWN - (now_ts - last_ts)
+        if remaining > 0:
+            mins = int(remaining // 60)
+            status = f"冷冻中 剩余{mins}m"
+        else:
+            status = "已解冻"
+        side_label = "超买" if side == Side.OVERBOUGHT else "超卖"
+        lines.append(f"  {zone_iv}+{obos_iv} {side_label}: {status} [上次推送 {ts_to_utc_str(last_ts)}]")
+    if not cooldown_found:
+        lines.append("  无记录")
+
     return "\n".join(lines)
 
 

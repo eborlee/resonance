@@ -106,18 +106,48 @@ class ZoneService:
             logger.warning(f"Zone事件无匹配规则: {event.symbol} {event.interval} {event.role} cache_keys={list(self.state.cache.keys())}")
             return
 
-        # Step 5：确定推送 topic
+        # Step 5：冷冻过滤（4h 内相同 zone+obos 组合不重复推送）
+        _ZONE_COMBO_COOLDOWN = 4 * 3600  # 秒
+        active_matched = []
+        for zone_iv, obos_iv, side, obos_state in matched:
+            if self.state.is_zone_combo_in_cooldown(
+                symbol=event.symbol,
+                zone_iv=zone_iv,
+                obos_iv=obos_iv,
+                side=side,
+                now_ts=now_ts,
+                cooldown_seconds=_ZONE_COMBO_COOLDOWN,
+            ):
+                logger.info(
+                    f"[Zone冷冻] {event.symbol} ({zone_iv}+{obos_iv} {side.value}) 在冷冻期内，跳过"
+                )
+            else:
+                active_matched.append((zone_iv, obos_iv, side, obos_state))
+
+        if not active_matched:
+            logger.info(f"[Zone冷冻] {event.symbol} {event.interval} 所有匹配组合均在冷冻期内，不推送")
+            return
+
+        # Step 6：确定推送 topic
         topic_attr = ZONE_INTERVAL_TO_TOPIC_ATTR.get(event.interval)
         if topic_attr is None:
             logger.warning(f"Zone interval 无对应topic配置: {event.interval}")
             return
         topic_id = getattr(settings, topic_attr)
 
-        # Step 6：推送
-        msg = _format_zone_message(event, matched)
-        logger.warning(f"[Zone推送] {event.symbol} {event.interval} {event.role} matched={[(r[1], r[2].value) for r in matched]}")
+        # Step 7：推送，并记录冷冻时间戳
+        msg = _format_zone_message(event, active_matched)
+        logger.warning(f"[Zone推送] {event.symbol} {event.interval} {event.role} matched={[(r[1], r[2].value) for r in active_matched]}")
         await self.tg.send_message(
             chat_id=settings.TG_CHAT_ID,
             text=msg,
             message_thread_id=topic_id,
         )
+        for zone_iv, obos_iv, side, _ in active_matched:
+            self.state.record_zone_combo_push(
+                symbol=event.symbol,
+                zone_iv=zone_iv,
+                obos_iv=obos_iv,
+                side=side,
+                now_ts=now_ts,
+            )
