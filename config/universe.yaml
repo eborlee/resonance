@@ -1,3 +1,5 @@
+main_topic_symbols: [BTCUSDT, ETHUSDT, WTI, XAUUSD]
+
 symbols:
   AAVEUSDT:
     intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]

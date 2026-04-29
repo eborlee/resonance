@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     TG_TOPIC_1H: int
     TG_TOPIC_15MIN: int
     TG_TOPIC_PRICE: int
+    TG_TOPIC_MAIN: int
 
     # Thresholds
     OB_LEVEL: float = 40.0
@@ -159,6 +160,14 @@ def load_routing(path: str) -> Dict[str, Dict[str, str]]:
 settings = Settings()
 def get_universe() -> Dict[str, List[str]]:
     return load_universe(settings.UNIVERSE_PATH, settings.UNIVERSE_LOCAL_PATH)
+
+def get_main_topic_symbols() -> List[str]:
+    """读取 universe.yaml 顶层 main_topic_symbols 列表，热读支持热更新。"""
+    if not os.path.exists(settings.UNIVERSE_PATH):
+        return []
+    with open(settings.UNIVERSE_PATH, "r", encoding="utf-8") as f:
+        raw = yaml.safe_load(f) or {}
+    return [str(s) for s in (raw.get("main_topic_symbols") or [])]
 
 def get_routing_rules() -> Dict[str, Dict[str, str]]:
     return load_routing(settings.ROUTING_PATH)

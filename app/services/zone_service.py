@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import List, Tuple
 
-from ..config import settings, get_universe
+from ..config import settings, get_universe, get_main_topic_symbols
 from ..domain.models import ZoneEvent, Side, LevelState
 from ..infra.store import AppState
 from ..adapters.tg_client import TelegramClient
@@ -138,11 +137,14 @@ class ZoneService:
         # Step 7：推送，并记录冷冻时间戳
         msg = _format_zone_message(event, active_matched)
         logger.warning(f"[Zone推送] {event.symbol} {event.interval} {event.role} matched={[(r[1], r[2].value) for r in active_matched]}")
+
+        actual_topic = settings.TG_TOPIC_MAIN if event.symbol in get_main_topic_symbols() else topic_id
         await self.tg.send_message(
             chat_id=settings.TG_CHAT_ID,
             text=msg,
-            message_thread_id=topic_id,
+            message_thread_id=actual_topic,
         )
+
         for zone_iv, obos_iv, side, _ in active_matched:
             self.state.record_zone_combo_push(
                 symbol=event.symbol,
