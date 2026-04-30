@@ -85,6 +85,9 @@ class AppState:
         # zone+obos 组合冷冻门控：key=(symbol, zone_iv, obos_iv, side) → last_pushed_ts
         self.zone_combo_last_pushed: Dict[Tuple[str, str, str, Side], float] = {}
 
+        # ema200+obos 组合冷冻门控：key=(symbol, ema200_iv, obos_iv, side) → last_pushed_ts
+        self.ema200_combo_last_pushed: Dict[Tuple[str, str, str, Side], float] = {}
+
         # 背离缓存：记录每个 (symbol, interval) 最近一次触发背离的时间（人可读字符串）
         self.divergence_cache: Dict[Tuple[str, str], str] = {}
 
@@ -201,6 +204,31 @@ class AppState:
         if last_ts is None:
             return False
         return (now_ts - last_ts) < cooldown_seconds
+
+    def is_ema200_combo_in_cooldown(
+        self,
+        symbol: str,
+        ema200_iv: str,
+        obos_iv: str,
+        side: Side,
+        now_ts: float,
+        cooldown_seconds: float,
+    ) -> bool:
+        key = (symbol, ema200_iv, obos_iv, side)
+        last_ts = self.ema200_combo_last_pushed.get(key)
+        if last_ts is None:
+            return False
+        return (now_ts - last_ts) < cooldown_seconds
+
+    def record_ema200_combo_push(
+        self,
+        symbol: str,
+        ema200_iv: str,
+        obos_iv: str,
+        side: Side,
+        now_ts: float,
+    ) -> None:
+        self.ema200_combo_last_pushed[(symbol, ema200_iv, obos_iv, side)] = now_ts
 
     def record_zone_combo_push(
         self,

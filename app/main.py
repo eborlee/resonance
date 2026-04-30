@@ -8,9 +8,10 @@ from fastapi import FastAPI, Request
 from .config import settings
 from .infra.store import AppState
 from .adapters.tg_client import TelegramClient
-from .adapters.tv_parser import parse_tv_payload, parse_zone_payload, parse_divergence_payload
+from .adapters.tv_parser import parse_tv_payload, parse_zone_payload, parse_ema200_payload, parse_divergence_payload
 from .services.resonance_service import ResonanceService
 from .services.zone_service import ZoneService
+from .services.ema200_service import Ema200Service
 from .services.divergence_service import DivergenceService
 from .services.tg_command_handler import polling_loop
 import logging
@@ -49,6 +50,7 @@ state = AppState(
 tg = TelegramClient(bot_token=settings.TG_BOT_TOKEN)
 svc = ResonanceService(state=state, tg=tg)
 zone_svc = ZoneService(state=state, tg=tg)
+ema200_svc = Ema200Service(state=state, tg=tg)
 divergence_svc = DivergenceService(state=state, tg=tg)
 
 
@@ -89,6 +91,17 @@ async def tradingview_webhook(req: Request):
             await divergence_svc.handle_event(div_event)
         except Exception:
             logger.error("divergence_service 处理异常", exc_info=True)
+        return {"ok": True}
+
+    # ema200_interaction 单独分发
+    if payload.get("type") == "ema200_interaction":
+        try:
+            ema200_event = parse_ema200_payload(payload)
+            if ema200_event is None:
+                return {"ok": True, "ignored": True}
+            await ema200_svc.handle_event(ema200_event)
+        except Exception:
+            logger.error("ema200_service 处理异常", exc_info=True)
         return {"ok": True}
 
     # zone_interaction 单独分发（独立异常处理，不走 fallback）

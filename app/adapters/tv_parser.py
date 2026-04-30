@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Tuple, Optional
 import time
 import re
 
-from ..domain.models import IntervalSignal, TvEvent, ZoneEvent, DivergenceEvent
+from ..domain.models import IntervalSignal, TvEvent, ZoneEvent, Ema200Event, DivergenceEvent
 
 from datetime import datetime, timezone
 
@@ -169,6 +169,52 @@ def parse_tv_payload(payload: Dict[str, Any]) -> TvEvent:
         signals.append(IntervalSignal(interval=interval, values=(value,)))
 
     return TvEvent(symbol=symbol, ts=ts, signals=signals)
+
+
+def parse_ema200_payload(payload: Dict[str, Any]) -> Optional[Ema200Event]:
+    """
+    解析 ema200_interaction 类型的 TV Webhook payload：
+
+    {
+      "type": "ema200_interaction",
+      "ticker": "BTCUSDT",
+      "interval": "240",
+      "ema200": 69435.1,
+      "role": "S",
+      "close": 69500.0,
+      "ts": 1745000000000
+    }
+    """
+    raw_symbol = payload.get("ticker") or payload.get("symbol") or ""
+    symbol = normalize_symbol(str(raw_symbol))
+    if not symbol:
+        return None
+
+    interval = map_interval(payload.get("interval"))
+    if interval is None:
+        return None
+
+    try:
+        ema200 = float(payload["ema200"])
+        close = float(payload["close"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+    role = str(payload.get("role", "")).strip().upper()
+    if role not in ("R", "S"):
+        return None
+
+    raw_ts = payload.get("ts")
+    ts = float(raw_ts) / 1000 if raw_ts is not None else time.time()
+
+    return Ema200Event(
+        symbol=symbol,
+        interval=interval,
+        ema200=ema200,
+        role=role,
+        close=close,
+        ts=ts,
+    )
 
 
 def parse_divergence_payload(payload: Dict[str, Any]) -> Optional[DivergenceEvent]:
