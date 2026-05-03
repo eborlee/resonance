@@ -95,15 +95,12 @@ def _draw_chart(
         (100, "#9c27b0"),
         (200, "#e53935"),
     ]
-    add_plots = [
-        mpf.make_addplot(
-            _compute_ema(closes, period),
-            color=color,
-            width=1.3,
-            label=f"EMA{period}",
-        )
-        for period, color in ema_configs
-    ]
+    add_plots = []
+    for period, color in ema_configs:
+        vals = _compute_ema(closes, period)
+        # K线数量不足时 EMA 全为 nan，mplfinance 会报 ValueError，跳过
+        if any(not math.isnan(v) for v in vals):
+            add_plots.append(mpf.make_addplot(vals, color=color, width=1.3, label=f"EMA{period}"))
 
     fig, axes = mpf.plot(
         df,
