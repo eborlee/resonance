@@ -91,10 +91,10 @@ def _draw_chart(
     closes = df["Close"].tolist()
 
     ema_configs = [
-        (21,  "#ff9800"),
-        (55,  "#2196f3"),
-        (100, "#9c27b0"),
-        (200, "#e53935"),
+        (21,  "#F5C518"),  # 亮黄
+        (55,  "#D4920A"),  # 深金黄
+        (100, "#A0621A"),  # 土黄褐
+        (200, "#6B3A10"),  # 深棕
     ]
     add_plots = []
     for period, color in ema_configs:
@@ -103,7 +103,7 @@ def _draw_chart(
         if display_n is not None:
             vals = vals[-display_n:]
         if any(not math.isnan(v) for v in vals):
-            add_plots.append(mpf.make_addplot(vals, color=color, width=1.3, label=f"EMA{period}"))
+            add_plots.append(mpf.make_addplot(vals, color=color, width=1.3, alpha=0.7, label=f"EMA{period}"))
 
     # 只显示最后 display_n 根 K线
     if display_n is not None:
