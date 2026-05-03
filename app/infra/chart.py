@@ -27,14 +27,20 @@ _CANDLES_PER_DAY: dict[str, int] = {
     "1h": 24,  # 24h / 1h
 }
 
+# TradingView symbol → Binance合约实际symbol（命名不一致时补充）
+_TV_TO_BINANCE: dict[str, str] = {
+    "RAYUSDT": "RAYSOLUSDT",
+}
+
 
 async def _fetch_klines(symbol: str, interval: str, limit: int) -> Optional[list]:
     """从Binance合约REST接口获取K线。symbol不存在（美股等）返回None，出错也返回None。"""
+    binance_symbol = _TV_TO_BINANCE.get(symbol.upper(), symbol.upper())
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             r = await client.get(
                 BINANCE_FUTURES_KLINES,
-                params={"symbol": symbol.upper(), "interval": interval, "limit": limit},
+                params={"symbol": binance_symbol, "interval": interval, "limit": limit},
             )
             if r.status_code in (400, 404):
                 logger.info(f"[Chart] Binance无此合约品种: {symbol}")
