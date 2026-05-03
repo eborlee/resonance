@@ -79,6 +79,7 @@ def _draw_chart(
     import pandas as pd
     import mplfinance as mpf
     import matplotlib.pyplot as plt
+    plt.rcParams["font.family"] = ["Noto Sans CJK SC", "Noto Sans CJK JP", "DejaVu Sans"]
 
     df = pd.DataFrame(klines, columns=[
         "Open_time", "Open", "High", "Low", "Close", "Volume",

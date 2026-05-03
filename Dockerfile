@@ -11,6 +11,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     curl \
     tzdata \
+    fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 
 # ===== 安装 Python 依赖（利用缓存）=====
