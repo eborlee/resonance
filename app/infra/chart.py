@@ -69,6 +69,7 @@ def _draw_chart(
     symbol: str,
     interval_label: str,
     klines: list,
+    display_n: Optional[int] = None,
     zone_bot: Optional[float] = None,
     zone_top: Optional[float] = None,
     zone_role: Optional[str] = None,
@@ -98,9 +99,15 @@ def _draw_chart(
     add_plots = []
     for period, color in ema_configs:
         vals = _compute_ema(closes, period)
-        # K线数量不足时 EMA 全为 nan，mplfinance 会报 ValueError，跳过
+        # 只取最后 display_n 个值，与 df 对齐
+        if display_n is not None:
+            vals = vals[-display_n:]
         if any(not math.isnan(v) for v in vals):
             add_plots.append(mpf.make_addplot(vals, color=color, width=1.3, label=f"EMA{period}"))
+
+    # 只显示最后 display_n 根 K线
+    if display_n is not None:
+        df = df.iloc[-display_n:]
 
     fig, axes = mpf.plot(
         df,
@@ -169,15 +176,17 @@ async def generate_chart(
 
     binance_iv = max_iv  # 4h/1h 与 Binance 接口字符串一致
     days = settings.CHART_4H_DAYS if max_iv == "4h" else settings.CHART_1H_DAYS
-    limit = days * candles_per_day
+    display_n = days * candles_per_day
+    # 多取 200 根用于 EMA200 预热，保证所有 EMA 都能画出来
+    fetch_limit = display_n + 200
     label = f"{binance_iv.upper()} · {days}d"
 
-    klines = await _fetch_klines(symbol, binance_iv, limit)
+    klines = await _fetch_klines(symbol, binance_iv, fetch_limit)
     if not klines:
         return None
 
     try:
-        return _draw_chart(symbol, label, klines, zone_bot=zone_bot, zone_top=zone_top, zone_role=zone_role, price_level=price_level)
+        return _draw_chart(symbol, label, klines, display_n=display_n, zone_bot=zone_bot, zone_top=zone_top, zone_role=zone_role, price_level=price_level)
     except Exception:
         logger.warning(f"[Chart] 绘图失败: {symbol}/{max_iv}", exc_info=True)
         return None
