@@ -38,6 +38,9 @@ async def _fetch_klines(symbol: str, interval: str, limit: int) -> Optional[list
             if r.status_code in (400, 404):
                 logger.info(f"[Chart] Binance无此合约品种: {symbol}")
                 return None
+            if r.status_code == 451:
+                logger.info(f"[Chart] Binance地区限制(451): {symbol}，跳过画图")
+                return None
             r.raise_for_status()
             data = r.json()
             if not isinstance(data, list) or len(data) == 0:
