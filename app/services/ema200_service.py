@@ -95,6 +95,11 @@ class Ema200Service:
         logger.warning(f"[EMA200推送] {event.symbol} {event.interval} {event.role} matched={[(r[1], r[2].value) for r in active_matched]}")
 
         actual_topic = settings.TG_TOPIC_MAIN if event.symbol in get_main_topic_symbols() else topic_id
+        obos_str = " | ".join(
+            f"{obos_iv}{'超买' if side == Side.OVERBOUGHT else '超卖'}"
+            for _, obos_iv, side, _ in active_matched
+        )
+        chart_title = f"{event.symbol}  {event.interval}【EMA200触及】{obos_str}"
         await send_with_chart(
             tg=self.tg,
             msg=msg,
@@ -102,6 +107,7 @@ class Ema200Service:
             topic_id=actual_topic,
             symbol=event.symbol,
             max_iv=event.interval,
+            chart_title=chart_title,
         )
 
         for ema200_iv, obos_iv, side, _ in active_matched:

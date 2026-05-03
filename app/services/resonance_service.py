@@ -30,6 +30,10 @@ logger = logging.getLogger(__name__)
 
 
 
+def _side_zh(side: Side) -> str:
+    return "超买" if side == Side.OVERBOUGHT else "超卖"
+
+
 def _parse_price_cross(text: str) -> tuple[str, float | None]:
     """
     从 TV 价格穿越文本中提取 symbol 和价格。
@@ -347,6 +351,8 @@ class ResonanceService:
                     )
 
                     actual_topic = settings.TG_TOPIC_MAIN if is_main_symbol else topic_id
+                    obos_str = " | ".join(f"{iv}{_side_zh(side)}" for iv in canon)
+                    chart_title = f"{event2.symbol}  {max_iv}【共振】{obos_str}"
                     send_tasks.append(
                         send_with_chart(
                             tg=self.tg,
@@ -355,6 +361,7 @@ class ResonanceService:
                             topic_id=actual_topic,
                             symbol=event2.symbol,
                             max_iv=max_iv,
+                            chart_title=chart_title,
                         )
                     )
 
@@ -385,6 +392,10 @@ class ResonanceService:
             return
 
         symbol, price = _parse_price_cross(text)
+        price_title = (
+            f"{symbol}  Price Alert: {price:,.4g}" if price is not None
+            else f"{symbol}  Price Alert"
+        )
 
         try:
             await send_with_chart(
@@ -395,6 +406,7 @@ class ResonanceService:
                 symbol=symbol,
                 max_iv="1h",
                 price_level=price,
+                chart_title=price_title,
             )
             logger.info("tv cross text routed to topic %s", settings.TG_TOPIC_PRICE)
         except Exception:

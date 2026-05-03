@@ -84,6 +84,11 @@ class DivergenceService:
         # Step 5：推送
         msg = _format_message(event, in_sides)
         logger.warning(f"[Divergence推送] {event.symbol} {event.interval} sides={[s.value for s in in_sides]}")
+        obos_str = " | ".join(
+            f"{event.interval}{'超买' if s == Side.OVERBOUGHT else '超卖'}"
+            for s in in_sides
+        )
+        chart_title = f"{event.symbol}  {event.interval}【顶底背离】{obos_str}"
         await send_with_chart(
             tg=self.tg,
             msg=msg,
@@ -91,4 +96,5 @@ class DivergenceService:
             topic_id=topic_id,
             symbol=event.symbol,
             max_iv=event.interval,
+            chart_title=chart_title,
         )
