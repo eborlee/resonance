@@ -8,6 +8,7 @@ from ..domain.models import DivergenceEvent, Side
 from ..infra.store import AppState
 from ..adapters.tg_client import TelegramClient
 from ..infra.utils import ts_to_utc_str
+from ..infra.chart import send_with_chart
 
 logger = logging.getLogger(__name__)
 
@@ -83,8 +84,11 @@ class DivergenceService:
         # Step 5：推送
         msg = _format_message(event, in_sides)
         logger.warning(f"[Divergence推送] {event.symbol} {event.interval} sides={[s.value for s in in_sides]}")
-        await self.tg.send_message(
+        await send_with_chart(
+            tg=self.tg,
+            msg=msg,
             chat_id=settings.TG_CHAT_ID,
-            text=msg,
-            message_thread_id=topic_id,
+            topic_id=topic_id,
+            symbol=event.symbol,
+            max_iv=event.interval,
         )

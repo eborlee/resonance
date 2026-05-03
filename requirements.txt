@@ -1,3 +1,6 @@
+matplotlib>=3.7.0
+mplfinance>=0.12.9
+pandas>=2.0.0
 annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.12.1

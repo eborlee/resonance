@@ -21,12 +21,33 @@ from .router import (
     max_interval,
     apply_min_interval_floor,
 )
+from ..infra.chart import send_with_chart
 from collections import defaultdict
 
 import logging
 logger = logging.getLogger(__name__)
 # logger.setLevel(logging.DEBUG)
 
+
+
+def _parse_price_cross(text: str) -> tuple[str, float | None]:
+    """
+    从 TV 价格穿越文本中提取 symbol 和价格。
+    示例："ETHUSDT.P 穿过 2,323.87" → ("ETHUSDT", 2323.87)
+    解析失败时 price 返回 None，symbol 返回空字符串。
+    """
+    import re
+    m = re.search(r'(\S+)\s*穿过\s*([\d,\.]+)', text)
+    if not m:
+        return "", None
+    raw_symbol = m.group(1)
+    # 去掉 TradingView 的永续合约后缀，如 .P、.PERP 等
+    symbol = raw_symbol.split(".")[0].upper()
+    try:
+        price = float(m.group(2).replace(",", ""))
+    except ValueError:
+        price = None
+    return symbol, price
 
 
 def filter_by_universe(event: TvEvent) -> TvEvent | None:
@@ -327,10 +348,13 @@ class ResonanceService:
 
                     actual_topic = settings.TG_TOPIC_MAIN if is_main_symbol else topic_id
                     send_tasks.append(
-                        self.tg.send_message(
+                        send_with_chart(
+                            tg=self.tg,
+                            msg=msg,
                             chat_id=settings.TG_CHAT_ID,
-                            text=msg,
-                            message_thread_id=actual_topic,
+                            topic_id=actual_topic,
+                            symbol=event2.symbol,
+                            max_iv=max_iv,
                         )
                     )
 
@@ -360,11 +384,17 @@ class ResonanceService:
             logger.info("tv text ignored: %s", text[:200])
             return
 
+        symbol, price = _parse_price_cross(text)
+
         try:
-            await self.tg.send_message(
+            await send_with_chart(
+                tg=self.tg,
+                msg=text,
                 chat_id=settings.TG_CHAT_ID,
-                text=text,
-                message_thread_id=settings.TG_TOPIC_PRICE,
+                topic_id=settings.TG_TOPIC_PRICE,
+                symbol=symbol,
+                max_iv="1h",
+                price_level=price,
             )
             logger.info("tv cross text routed to topic %s", settings.TG_TOPIC_PRICE)
         except Exception:

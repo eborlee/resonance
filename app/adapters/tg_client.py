@@ -27,6 +27,28 @@ class TelegramClient:
             r.raise_for_status()
             return r.json().get("result", [])
 
+    async def send_photo(
+        self,
+        chat_id: str,
+        photo: bytes,
+        caption: str | None = None,
+        message_thread_id: int | None = None,
+    ):
+        data: dict = {"chat_id": chat_id}
+        if caption:
+            data["caption"] = caption
+        if message_thread_id is not None:
+            data["message_thread_id"] = int(message_thread_id)
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.post(
+                f"{self.base}/sendPhoto",
+                data=data,
+                files={"photo": ("chart.png", photo, "image/png")},
+            )
+            r.raise_for_status()
+            return r.json()
+
     async def set_my_commands(self, commands: List[Dict[str, str]]) -> None:
         """注册 bot 命令菜单（私聊范围）"""
         payload = {

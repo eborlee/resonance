@@ -8,6 +8,7 @@ from ..domain.models import ZoneEvent, Side, LevelState
 from ..infra.store import AppState
 from ..adapters.tg_client import TelegramClient
 from ..infra.utils import ts_to_utc_str
+from ..infra.chart import send_with_chart
 from .zone_rules import ZONE_RULES, ZONE_INTERVAL_TO_TOPIC_ATTR
 
 logger = logging.getLogger(__name__)
@@ -139,10 +140,16 @@ class ZoneService:
         logger.warning(f"[Zone推送] {event.symbol} {event.interval} {event.role} matched={[(r[1], r[2].value) for r in active_matched]}")
 
         actual_topic = settings.TG_TOPIC_MAIN if event.symbol in get_main_topic_symbols() else topic_id
-        await self.tg.send_message(
+        await send_with_chart(
+            tg=self.tg,
+            msg=msg,
             chat_id=settings.TG_CHAT_ID,
-            text=msg,
-            message_thread_id=actual_topic,
+            topic_id=actual_topic,
+            symbol=event.symbol,
+            max_iv=event.interval,
+            zone_bot=event.bot,
+            zone_top=event.top,
+            zone_role=event.role,
         )
 
         for zone_iv, obos_iv, side, _ in active_matched:
