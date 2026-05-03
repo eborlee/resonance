@@ -75,6 +75,7 @@ def _draw_chart(
     zone_role: Optional[str] = None,
     price_level: Optional[float] = None,
     chart_title: Optional[str] = None,
+    price_label: Optional[str] = None,
 ) -> bytes:
     import pandas as pd
     import mplfinance as mpf
@@ -147,7 +148,7 @@ def _draw_chart(
     if price_level is not None:
         ax.axhline(price_level, color="#ef5350", linewidth=1.2, linestyle="--", alpha=0.9, zorder=4)
         ax.text(
-            0.01, price_level, f" {price_level:,.4g}",
+            0.01, price_level, f" {price_label if price_label else price_level}",
             transform=ax.get_yaxis_transform(),
             color="#ef5350", fontsize=7, va="bottom",
         )
@@ -167,6 +168,7 @@ async def generate_chart(
     zone_role: Optional[str] = None,
     price_level: Optional[float] = None,
     chart_title: Optional[str] = None,
+    price_label: Optional[str] = None,
 ) -> Optional[bytes]:
     """
     生成带EMA21/55/100/200的K线图（PNG字节）。
@@ -190,7 +192,7 @@ async def generate_chart(
         return None
 
     try:
-        return _draw_chart(symbol, label, klines, display_n=display_n, zone_bot=zone_bot, zone_top=zone_top, zone_role=zone_role, price_level=price_level, chart_title=chart_title)
+        return _draw_chart(symbol, label, klines, display_n=display_n, zone_bot=zone_bot, zone_top=zone_top, zone_role=zone_role, price_level=price_level, chart_title=chart_title, price_label=price_label)
     except Exception:
         logger.warning(f"[Chart] 绘图失败: {symbol}/{max_iv}", exc_info=True)
         return None
@@ -207,13 +209,14 @@ async def _try_send_chart(
     zone_role: Optional[str] = None,
     price_level: Optional[float] = None,
     chart_title: Optional[str] = None,
+    price_label: Optional[str] = None,
 ) -> None:
     """生成并发送K线图。所有异常均被吞掉，不影响文字消息。"""
     try:
         photo = await generate_chart(
             symbol, max_iv,
             zone_bot=zone_bot, zone_top=zone_top, zone_role=zone_role,
-            price_level=price_level, chart_title=chart_title,
+            price_level=price_level, chart_title=chart_title, price_label=price_label,
         )
         if photo is not None:
             await tg.send_photo(
@@ -237,6 +240,7 @@ async def send_with_chart(
     zone_role: Optional[str] = None,
     price_level: Optional[float] = None,
     chart_title: Optional[str] = None,
+    price_label: Optional[str] = None,
 ) -> None:
     """
     在话题锁保护下，顺序发送文字消息和K线图。
@@ -254,4 +258,5 @@ async def send_with_chart(
             zone_role=zone_role,
             price_level=price_level,
             chart_title=chart_title,
+            price_label=price_label,
         )

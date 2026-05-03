@@ -34,24 +34,25 @@ def _side_zh(side: Side) -> str:
     return "超买" if side == Side.OVERBOUGHT else "超卖"
 
 
-def _parse_price_cross(text: str) -> tuple[str, float | None]:
+def _parse_price_cross(text: str) -> tuple[str, float | None, str]:
     """
-    从 TV 价格穿越文本中提取 symbol 和价格。
-    示例："ETHUSDT.P 穿过 2,323.87" → ("ETHUSDT", 2323.87)
-    解析失败时 price 返回 None，symbol 返回空字符串。
+    从 TV 价格穿越文本中提取 symbol、价格 float 和原始价格字符串。
+    示例："ETHUSDT.P 穿过 2,323.87" → ("ETHUSDT", 2323.87, "2,323.87")
+    解析失败时 price 返回 None，price_str 返回空字符串。
     """
     import re
     m = re.search(r'(\S+)\s*穿过\s*([\d,\.]+)', text)
     if not m:
-        return "", None
+        return "", None, ""
     raw_symbol = m.group(1)
     # 去掉 TradingView 的永续合约后缀，如 .P、.PERP 等
     symbol = raw_symbol.split(".")[0].upper()
+    price_str = m.group(2)  # 保留原始字符串，如 "78,080.00"
     try:
-        price = float(m.group(2).replace(",", ""))
+        price = float(price_str.replace(",", ""))
     except ValueError:
         price = None
-    return symbol, price
+    return symbol, price, price_str
 
 
 def filter_by_universe(event: TvEvent) -> TvEvent | None:
@@ -391,9 +392,9 @@ class ResonanceService:
             logger.info("tv text ignored: %s", text[:200])
             return
 
-        symbol, price = _parse_price_cross(text)
+        symbol, price, price_str = _parse_price_cross(text)
         price_title = (
-            f"{symbol}  Price Alert: {price:,.4g}" if price is not None
+            f"{symbol}  Price Alert: {price_str}" if price_str
             else f"{symbol}  Price Alert"
         )
 
@@ -406,6 +407,7 @@ class ResonanceService:
                 symbol=symbol,
                 max_iv="1h",
                 price_level=price,
+                price_label=price_str,
                 chart_title=price_title,
             )
             logger.info("tv cross text routed to topic %s", settings.TG_TOPIC_PRICE)
