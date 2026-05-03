@@ -4,6 +4,7 @@ import asyncio
 import io
 import logging
 import math
+import os
 from typing import TYPE_CHECKING, Optional
 
 import httpx
@@ -65,6 +66,36 @@ def _compute_ema(prices: list[float], period: int) -> list[float]:
     return result
 
 
+_CJK_FONT_LOADED = False
+
+def _ensure_cjk_font() -> None:
+    global _CJK_FONT_LOADED
+    if _CJK_FONT_LOADED:
+        return
+    import matplotlib.font_manager as fm
+    import matplotlib.pyplot as plt
+    candidates = [
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            fm.fontManager.addfont(path)
+            prop = fm.FontProperties(fname=path)
+            name = prop.get_name()
+            plt.rcParams["font.sans-serif"] = [name] + plt.rcParams.get("font.sans-serif", [])
+            plt.rcParams["font.family"] = "sans-serif"
+            plt.rcParams["axes.unicode_minus"] = False
+            _CJK_FONT_LOADED = True
+            logger.info(f"[Chart] 已加载CJK字体: {name} ({path})")
+            return
+    # fallback：仅设置通用族名
+    plt.rcParams["font.family"] = ["Noto Sans CJK SC", "Noto Sans CJK JP", "DejaVu Sans"]
+    plt.rcParams["axes.unicode_minus"] = False
+    _CJK_FONT_LOADED = True
+
+
 def _draw_chart(
     symbol: str,
     interval_label: str,
@@ -80,7 +111,7 @@ def _draw_chart(
     import pandas as pd
     import mplfinance as mpf
     import matplotlib.pyplot as plt
-    plt.rcParams["font.family"] = ["Noto Sans CJK SC", "Noto Sans CJK JP", "DejaVu Sans"]
+    _ensure_cjk_font()
 
     df = pd.DataFrame(klines, columns=[
         "Open_time", "Open", "High", "Low", "Close", "Volume",
@@ -152,6 +183,12 @@ def _draw_chart(
             transform=ax.get_yaxis_transform(),
             color="#ef5350", fontsize=7, va="bottom",
         )
+
+    # 锁定 y 轴到 K 线价格范围，防止 zone/price 值远离时压扁蜡烛图
+    y_min = df["Low"].min()
+    y_max = df["High"].max()
+    margin = (y_max - y_min) * 0.08
+    ax.set_ylim(y_min - margin, y_max + margin)
 
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=120, bbox_inches="tight")
