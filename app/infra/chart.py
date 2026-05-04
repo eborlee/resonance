@@ -226,8 +226,9 @@ async def generate_chart(
     binance_iv = max_iv  # 4h/1h 与 Binance 接口字符串一致
     days = settings.CHART_4H_DAYS if max_iv == "4h" else settings.CHART_1H_DAYS
     display_n = days * candles_per_day
-    # 多取 200 根用于 EMA200 预热，保证所有 EMA 都能画出来
-    fetch_limit = display_n + 200
+    # EMA200 收敛需要足够多的预热K线：200根仅够初始化SMA，偏差仍剩~14%；
+    # 500根后偏差降至<1%，且远低于Binance单次1500根上限
+    fetch_limit = display_n + 500
     label = f"{binance_iv.upper()} · {days}d"
 
     klines = await _fetch_klines(symbol, binance_iv, fetch_limit)
