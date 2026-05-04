@@ -80,25 +80,47 @@ def _ensure_cjk_font() -> None:
         return
     import matplotlib.font_manager as fm
     import matplotlib.pyplot as plt
-    candidates = [
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-        "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
-        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
-    ]
-    for path in candidates:
-        if os.path.exists(path):
-            fm.fontManager.addfont(path)
-            prop = fm.FontProperties(fname=path)
-            name = prop.get_name()
-            plt.rcParams["font.sans-serif"] = [name] + plt.rcParams.get("font.sans-serif", [])
-            plt.rcParams["font.family"] = "sans-serif"
-            plt.rcParams["axes.unicode_minus"] = False
-            _CJK_FONT_LOADED = True
-            logger.info(f"[Chart] 已加载CJK字体: {name} ({path})")
-            return
-    # fallback：仅设置通用族名
-    plt.rcParams["font.family"] = ["Noto Sans CJK SC", "Noto Sans CJK JP", "DejaVu Sans"]
+
+    cjk_path: Optional[str] = None
+
+    # Step 1：让 matplotlib 扫描系统字体目录，找包含 CJK/Noto 关键字的字体
+    _CJK_KEYWORDS = ("noto", "cjk", "wqy", "simhei", "simsun")
+    try:
+        for f in fm.findSystemFonts():
+            if any(k in f.lower() for k in _CJK_KEYWORDS):
+                cjk_path = f
+                break
+    except Exception as e:
+        logger.warning(f"[Chart] findSystemFonts 失败: {e}")
+
+    # Step 2：系统扫描没找到时，尝试已知路径并手动注册
+    if cjk_path is None:
+        for p in [
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        ]:
+            if os.path.exists(p):
+                fm.fontManager.addfont(p)
+                cjk_path = p
+                break
+
+    if cjk_path is None:
+        logger.warning("[Chart] 未找到任何CJK字体，中文将显示为方块")
+        plt.rcParams["axes.unicode_minus"] = False
+        _CJK_FONT_LOADED = True
+        return
+
+    prop = fm.FontProperties(fname=cjk_path)
+    name = prop.get_name()
+    plt.rcParams["font.sans-serif"] = [name] + list(plt.rcParams.get("font.sans-serif", []))
+    plt.rcParams["font.family"] = "sans-serif"
     plt.rcParams["axes.unicode_minus"] = False
+
+    # 验证 matplotlib 实际解析到的字体文件
+    resolved = fm.fontManager.findfont(prop)
+    logger.info(f"[Chart] CJK字体: {name}  文件: {cjk_path}  解析: {resolved}")
+
     _CJK_FONT_LOADED = True
 
 
