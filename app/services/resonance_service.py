@@ -394,8 +394,8 @@ class ResonanceService:
 
         symbol, price, price_str = _parse_price_cross(text)
         price_title = (
-            f"{symbol}  Price Alert: {price_str}" if price_str
-            else f"{symbol}  Price Alert"
+            f"{symbol}  价格警报: {price_str}" if price_str
+            else f"{symbol}  价格警报"
         )
 
         try:
