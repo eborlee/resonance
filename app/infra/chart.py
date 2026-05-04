@@ -73,25 +73,35 @@ def _compute_ema(prices: list[float], period: int) -> list[float]:
 
 
 _CJK_FONT_LOADED = False
+_cjk_font_prop = None   # FontProperties(fname=...) 供 _draw_chart 直接设到 Text 对象上
+
+_CJK_KEYWORDS = ("noto", "cjk", "wqy", "simhei", "simsun")
 
 def _ensure_cjk_font() -> None:
-    global _CJK_FONT_LOADED
+    global _CJK_FONT_LOADED, _cjk_font_prop
     if _CJK_FONT_LOADED:
         return
     import matplotlib.font_manager as fm
     import matplotlib.pyplot as plt
 
     cjk_path: Optional[str] = None
+    cjk_fallback: Optional[str] = None
 
-    # Step 1：让 matplotlib 扫描系统字体目录，找包含 CJK/Noto 关键字的字体
-    _CJK_KEYWORDS = ("noto", "cjk", "wqy", "simhei", "simsun")
+    # Step 1：从 matplotlib 系统字体扫描结果中查找，优先选 Regular 权重
     try:
         for f in fm.findSystemFonts():
-            if any(k in f.lower() for k in _CJK_KEYWORDS):
-                cjk_path = f
-                break
+            fl = f.lower()
+            if any(k in fl for k in _CJK_KEYWORDS):
+                if "regular" in fl:
+                    cjk_path = f
+                    break
+                elif cjk_fallback is None:
+                    cjk_fallback = f  # Bold/其他权重作为备选
     except Exception as e:
         logger.warning(f"[Chart] findSystemFonts 失败: {e}")
+
+    if cjk_path is None:
+        cjk_path = cjk_fallback
 
     # Step 2：系统扫描没找到时，尝试已知路径并手动注册
     if cjk_path is None:
@@ -105,23 +115,17 @@ def _ensure_cjk_font() -> None:
                 cjk_path = p
                 break
 
+    plt.rcParams["axes.unicode_minus"] = False
+    _CJK_FONT_LOADED = True
+
     if cjk_path is None:
         logger.warning("[Chart] 未找到任何CJK字体，中文将显示为方块")
-        plt.rcParams["axes.unicode_minus"] = False
-        _CJK_FONT_LOADED = True
         return
 
-    prop = fm.FontProperties(fname=cjk_path)
-    name = prop.get_name()
-    plt.rcParams["font.sans-serif"] = [name] + list(plt.rcParams.get("font.sans-serif", []))
-    plt.rcParams["font.family"] = "sans-serif"
-    plt.rcParams["axes.unicode_minus"] = False
-
-    # 验证 matplotlib 实际解析到的字体文件
-    resolved = fm.fontManager.findfont(prop)
-    logger.info(f"[Chart] CJK字体: {name}  文件: {cjk_path}  解析: {resolved}")
-
-    _CJK_FONT_LOADED = True
+    # 存 FontProperties(fname=...) 供 _draw_chart 直接注入到 Text 对象，
+    # 绕过 matplotlib 按名称查找字体时可能回落到 DejaVu Sans 的问题
+    _cjk_font_prop = fm.FontProperties(fname=cjk_path)
+    logger.info(f"[Chart] CJK字体已加载: {cjk_path}")
 
 
 def _draw_chart(
@@ -184,6 +188,11 @@ def _draw_chart(
     )
 
     ax = axes[0]
+
+    # 直接将 CJK 字体注入 suptitle Text 对象，绕过名称查找回落问题
+    if _cjk_font_prop is not None:
+        for txt in fig.texts:
+            txt.set_fontproperties(_cjk_font_prop)
 
     # 图例（mplfinance returnfig 模式下需手动触发）
     handles, labels = [], []
