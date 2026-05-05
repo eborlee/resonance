@@ -145,6 +145,15 @@ class ZoneService:
             for _, obos_iv, side, _ in active_matched
         )
         chart_title = f"{event.symbol}  {event.interval}【关键区域】{obos_str}"
+        for zone_iv, obos_iv, side, _ in active_matched:
+            self.state.record_zone_combo_push(
+                symbol=event.symbol,
+                zone_iv=zone_iv,
+                obos_iv=obos_iv,
+                side=side,
+                now_ts=now_ts,
+            )
+
         await send_with_chart(
             tg=self.tg,
             msg=msg,
@@ -157,12 +166,3 @@ class ZoneService:
             zone_role=event.role,
             chart_title=chart_title,
         )
-
-        for zone_iv, obos_iv, side, _ in active_matched:
-            self.state.record_zone_combo_push(
-                symbol=event.symbol,
-                zone_iv=zone_iv,
-                obos_iv=obos_iv,
-                side=side,
-                now_ts=now_ts,
-            )

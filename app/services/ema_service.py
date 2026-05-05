@@ -96,17 +96,16 @@ class EmaService:
 
         chart_title = f"{event.symbol}  {event.interval}【EMA200触及】{obos_str}"
         logger.warning(f"[EMA200推送] {event.symbol} {event.interval} {event.role}")
-        await send_with_chart(
-            tg=self.tg, msg="\n".join(msg_lines),
-            chat_id=settings.TG_CHAT_ID, topic_id=actual_topic,
-            symbol=event.symbol, max_iv=event.interval, chart_title=chart_title,
-        )
-
         for ema_iv, obos_iv, side, _ in active_matched:
             self.state.record_ema200_combo_push(
                 symbol=event.symbol, ema200_iv=ema_iv,
                 obos_iv=obos_iv, side=side, now_ts=now_ts,
             )
+        await send_with_chart(
+            tg=self.tg, msg="\n".join(msg_lines),
+            chat_id=settings.TG_CHAT_ID, topic_id=actual_topic,
+            symbol=event.symbol, max_iv=event.interval, chart_title=chart_title,
+        )
 
     # ────────────────────────────────────────────────
     # EMA55：触及 EMA55 + 1h15m 共振 active
@@ -139,6 +138,9 @@ class EmaService:
         topic_id = settings.TG_TOPIC_MAIN if is_main else settings.TG_TOPIC_1H
 
         for side in matched_sides:
+            self.state.record_ema55_push(event.symbol, side, now_ts)
+
+        for side in matched_sides:
             side_label = "超卖" if side == Side.OVERSOLD else "超买"
             dot = "🟢" if side == Side.OVERSOLD else "🔴"
             role_label = "支撑" if event.role == "S" else "阻力"
@@ -156,4 +158,3 @@ class EmaService:
                 chat_id=settings.TG_CHAT_ID, topic_id=topic_id,
                 symbol=event.symbol, max_iv=event.interval, chart_title=chart_title,
             )
-            self.state.record_ema55_push(event.symbol, side, now_ts)
