@@ -10,7 +10,7 @@ ALLOWED_COMBINATIONS = [
     ("4h", "1h", "15m"),
     # ("4h", "15m"),
 
-    # ("1h", "15m"),
+    ("1h", "15m"),
     # ("1h", "15m", "3m"),
     # ("1h", "3m"),
 
@@ -20,6 +20,11 @@ ALLOWED_COMBINATIONS = [
     ("1D", "4h"),
     ("1D", "1h"),
 ]
+
+# 只合成缓存、不主动推送的组合（供其他事件反查）
+SILENT_COMBINATIONS: set[tuple] = {
+    ("1h", "15m"),
+}
 
 COMBINATION_ROUTING = {
     ("1D", "4h", "1h"): settings.TG_TOPIC_DAY,

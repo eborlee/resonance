@@ -65,11 +65,12 @@ class ZoneEvent:
 
 
 @dataclass(frozen=True)
-class Ema200Event:
+class EmaEvent:
     symbol: str
     interval: str
-    ema200: float
-    role: str       # "R"=阻力 / "S"=支撑
+    period: int      # EMA 周期，如 21 / 55 / 100 / 200
+    ema_value: float # EMA 价格
+    role: str        # "R"=阻力 / "S"=支撑
     close: float
     ts: float
 

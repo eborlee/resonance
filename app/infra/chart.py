@@ -193,7 +193,7 @@ def _draw_chart(
     if _cjk_font_prop is not None:
         for txt in fig.texts:
             txt.set_fontproperties(_cjk_font_prop)
-            txt.set_fontsize(17)
+            txt.set_fontsize(21)
 
     # 图例（mplfinance returnfig 模式下需手动触发）
     handles, labels = [], []

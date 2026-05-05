@@ -40,8 +40,8 @@ class Settings(BaseSettings):
     ROUTING_PATH: str = "config/routing.yaml"
 
     # K线图天数配置
-    CHART_4H_DAYS: int = 10   # 4h频道：拉取最近N天的4h K线
-    CHART_1H_DAYS: int = 3    # 1h频道：拉取最近N天的1h K线
+    CHART_4H_DAYS: int = 14   # 4h频道：拉取最近N天的4h K线
+    CHART_1H_DAYS: int = 5    # 1h频道：拉取最近N天的1h K线
 
     # Logging
     LOG_PATH: str = "logs/app.log"

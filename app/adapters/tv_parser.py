@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Tuple, Optional
 import time
 import re
 
-from ..domain.models import IntervalSignal, TvEvent, ZoneEvent, Ema200Event, DivergenceEvent
+from ..domain.models import IntervalSignal, TvEvent, ZoneEvent, EmaEvent, DivergenceEvent
 
 from datetime import datetime, timezone
 
@@ -171,10 +171,23 @@ def parse_tv_payload(payload: Dict[str, Any]) -> TvEvent:
     return TvEvent(symbol=symbol, ts=ts, signals=signals)
 
 
-def parse_ema200_payload(payload: Dict[str, Any]) -> Optional[Ema200Event]:
+def parse_ema_payload(payload: Dict[str, Any]) -> Optional[EmaEvent]:
     """
-    解析 ema200_interaction 类型的 TV Webhook payload：
+    解析 EMA 触及 Webhook payload，统一用 EmaEvent + period 字段区分周期。
 
+    Pine Script 格式（当前推荐）：
+    {
+      "type": "ema_interaction",
+      "ticker": "BTCUSDT.P",
+      "interval": "60",
+      "ema": "ema55",
+      "ema_val": 69435.1,
+      "role": "S",
+      "close": 69500.0,
+      "ts": 1745000000000
+    }
+
+    旧格式兼容（ema200_interaction，ema200 字段）：
     {
       "type": "ema200_interaction",
       "ticker": "BTCUSDT",
@@ -194,8 +207,41 @@ def parse_ema200_payload(payload: Dict[str, Any]) -> Optional[Ema200Event]:
     if interval is None:
         return None
 
+    # period + ema_value 解析，按优先级依次尝试三种格式：
+    # 1. Pine Script 格式：ema="ema55", ema_val=float
+    # 2. 整数 period 格式：period=55, ema_value=float
+    # 3. 旧字段名格式：ema200=float / ema55=float ...
+    period: Optional[int] = None
+    ema_value: Optional[float] = None
+
+    if "ema" in payload and "ema_val" in payload:
+        # Pine Script: "ema":"ema55", "ema_val":69435.1
+        try:
+            period = int(str(payload["ema"]).strip().lower().replace("ema", ""))
+            ema_value = float(payload["ema_val"])
+        except (TypeError, ValueError):
+            return None
+    elif "period" in payload and "ema_value" in payload:
+        try:
+            period = int(payload["period"])
+            ema_value = float(payload["ema_value"])
+        except (TypeError, ValueError):
+            return None
+    else:
+        for p in (200, 100, 55, 21):
+            key = f"ema{p}"
+            if key in payload:
+                try:
+                    period = p
+                    ema_value = float(payload[key])
+                except (TypeError, ValueError):
+                    return None
+                break
+
+    if period is None or ema_value is None:
+        return None
+
     try:
-        ema200 = float(payload["ema200"])
         close = float(payload["close"])
     except (KeyError, TypeError, ValueError):
         return None
@@ -207,10 +253,11 @@ def parse_ema200_payload(payload: Dict[str, Any]) -> Optional[Ema200Event]:
     raw_ts = payload.get("ts")
     ts = float(raw_ts) / 1000 if raw_ts is not None else time.time()
 
-    return Ema200Event(
+    return EmaEvent(
         symbol=symbol,
         interval=interval,
-        ema200=ema200,
+        period=period,
+        ema_value=ema_value,
         role=role,
         close=close,
         ts=ts,

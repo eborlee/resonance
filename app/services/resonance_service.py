@@ -3,7 +3,7 @@ import asyncio
 import hashlib
 from fastapi import Request
 from typing import List, Dict
-from .resonance_combinations import canonical_combo, match_combinations_with_lifecycle, COMBINATION_ROUTING
+from .resonance_combinations import canonical_combo, match_combinations_with_lifecycle, COMBINATION_ROUTING, SILENT_COMBINATIONS
 from .resonance_combinations import ALLOWED_COMBINATIONS
 from ..config import settings, universe, routing_rules,get_routing_rules,get_universe, get_main_topic_symbols
 from ..domain.models import (
@@ -318,6 +318,11 @@ class ResonanceService:
 
                     # 代表 combo（展示层）
                     self.state.last_active_combo[key] = canon
+
+                    # 静默组合：只缓存，不推送
+                    if canon in SILENT_COMBINATIONS:
+                        logger.info(f"[静默组合] {event2.symbol}-{side} {canon} 已缓存，不推送")
+                        continue
 
                     # routing 防御
                     if canon not in COMBINATION_ROUTING:
