@@ -125,6 +125,20 @@ class EmaService:
             if not meta or not meta.get("active"):
                 logger.info(f"[EMA55] {event.symbol} {side.value} 1h+15m 不活跃，跳过")
                 continue
+            # 校验两个分量周期仍在 IN（不接受 WARM），防止分量已退出超买/超卖但 combo 尚未清理的误触
+            still_in = True
+            for iv in _EMA55_COMBO:
+                rec = self.state.cache.get((event.symbol, iv))
+                if rec is None:
+                    still_in = False
+                    break
+                currently_in = rec.in_overbought if side == Side.OVERBOUGHT else rec.in_oversold
+                if not currently_in:
+                    logger.info(f"[EMA55] {event.symbol} {side.value} {iv} 已不在 IN，跳过")
+                    still_in = False
+                    break
+            if not still_in:
+                continue
             if self.state.is_ema55_in_cooldown(event.symbol, side, now_ts, _EMA55_COOLDOWN):
                 logger.info(f"[EMA55冷冻] {event.symbol} {side.value} 在冷冻期内，跳过")
                 continue
