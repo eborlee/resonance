@@ -9,7 +9,8 @@ from ..infra.store import AppState
 from ..adapters.tg_client import TelegramClient
 from ..infra.utils import ts_to_utc_str
 from ..infra.chart import send_with_chart
-from .zone_rules import ZONE_RULES, ZONE_INTERVAL_TO_TOPIC_ATTR
+from collections import defaultdict
+from .zone_rules import ZONE_RULES, ZONE_INTERVAL_TO_TOPIC_ATTR, ZONE_RULE_OVERRIDES
 
 logger = logging.getLogger(__name__)
 
@@ -106,17 +107,19 @@ class ZoneService:
             logger.warning(f"Zone事件无匹配规则: {event.symbol} {event.interval} {event.role} cache_keys={list(self.state.cache.keys())}")
             return
 
-        # Step 5：冷冻过滤（4h 内相同 zone+obos 组合不重复推送）
-        _ZONE_COMBO_COOLDOWN = 4 * 3600  # 秒
+        # Step 5：冷冻过滤（per-rule 冷冻时长）
+        _DEFAULT_COOLDOWN = 4 * 3600
         active_matched = []
         for zone_iv, obos_iv, side, obos_state in matched:
+            override = ZONE_RULE_OVERRIDES.get((zone_iv, obos_iv))
+            cooldown = override["cooldown"] if override else _DEFAULT_COOLDOWN
             if self.state.is_zone_combo_in_cooldown(
                 symbol=event.symbol,
                 zone_iv=zone_iv,
                 obos_iv=obos_iv,
                 side=side,
                 now_ts=now_ts,
-                cooldown_seconds=_ZONE_COMBO_COOLDOWN,
+                cooldown_seconds=cooldown,
             ):
                 logger.info(
                     f"[Zone冷冻] {event.symbol} ({zone_iv}+{obos_iv} {side.value}) 在冷冻期内，跳过"
@@ -128,23 +131,24 @@ class ZoneService:
             logger.info(f"[Zone冷冻] {event.symbol} {event.interval} 所有匹配组合均在冷冻期内，不推送")
             return
 
-        # Step 6：确定推送 topic
-        topic_attr = ZONE_INTERVAL_TO_TOPIC_ATTR.get(event.interval)
-        if topic_attr is None:
-            logger.warning(f"Zone interval 无对应topic配置: {event.interval}")
-            return
-        topic_id = getattr(settings, topic_attr)
+        # Step 6：按目标 topic 分组
+        is_main_symbol = event.symbol in get_main_topic_symbols()
+        topic_groups: dict[tuple, list] = defaultdict(list)
+        for item in active_matched:
+            zone_iv, obos_iv, side, obos_state = item
+            override = ZONE_RULE_OVERRIDES.get((zone_iv, obos_iv))
+            if override:
+                t_attr = override["topic_attr"]
+                skip_main = override["skip_main"]
+            else:
+                t_attr = ZONE_INTERVAL_TO_TOPIC_ATTR.get(zone_iv)
+                if t_attr is None:
+                    logger.warning(f"Zone interval 无对应topic配置: {zone_iv}")
+                    continue
+                skip_main = False
+            topic_groups[(t_attr, skip_main)].append(item)
 
-        # Step 7：推送，并记录冷冻时间戳
-        msg = _format_zone_message(event, active_matched)
-        logger.warning(f"[Zone推送] {event.symbol} {event.interval} {event.role} matched={[(r[1], r[2].value) for r in active_matched]}")
-
-        actual_topic = settings.TG_TOPIC_MAIN if event.symbol in get_main_topic_symbols() else topic_id
-        obos_str = " | ".join(
-            f"{obos_iv}{'超买' if side == Side.OVERBOUGHT else '超卖'}"
-            for _, obos_iv, side, _ in active_matched
-        )
-        chart_title = f"{event.symbol}  {event.interval}【关键区域】{obos_str}"
+        # Step 7：先统一占坑，再逐组推送
         for zone_iv, obos_iv, side, _ in active_matched:
             self.state.record_zone_combo_push(
                 symbol=event.symbol,
@@ -154,15 +158,25 @@ class ZoneService:
                 now_ts=now_ts,
             )
 
-        await send_with_chart(
-            tg=self.tg,
-            msg=msg,
-            chat_id=settings.TG_CHAT_ID,
-            topic_id=actual_topic,
-            symbol=event.symbol,
-            max_iv=event.interval,
-            zone_bot=event.bot,
-            zone_top=event.top,
-            zone_role=event.role,
-            chart_title=chart_title,
-        )
+        for (t_attr, skip_main), items in topic_groups.items():
+            topic_id = getattr(settings, t_attr)
+            actual_topic = topic_id if skip_main else (settings.TG_TOPIC_MAIN if is_main_symbol else topic_id)
+            obos_str = " | ".join(
+                f"{obos_iv}{'超买' if side == Side.OVERBOUGHT else '超卖'}"
+                for _, obos_iv, side, _ in items
+            )
+            msg = _format_zone_message(event, items)
+            chart_title = f"{event.symbol}  {event.interval}【关键区域】{obos_str}"
+            logger.warning(f"[Zone推送] {event.symbol} {event.interval} {event.role} topic={t_attr} matched={[(r[1], r[2].value) for r in items]}")
+            await send_with_chart(
+                tg=self.tg,
+                msg=msg,
+                chat_id=settings.TG_CHAT_ID,
+                topic_id=actual_topic,
+                symbol=event.symbol,
+                max_iv=event.interval,
+                zone_bot=event.bot,
+                zone_top=event.top,
+                zone_role=event.role,
+                chart_title=chart_title,
+            )
