@@ -91,6 +91,12 @@ class AppState:
         # ema55+1h15m 冷冻门控：key=(symbol, side) → last_pushed_ts
         self.ema55_last_pushed: Dict[Tuple[str, Side], float] = {}
 
+        # 波动预警状态：key=(symbol, interval) → expiry_ts（1.5倍K线时长）
+        self.volatile_expiry: Dict[Tuple[str, str], float] = {}
+
+        # 波动预警推送冷冻：key=(symbol, interval, side) → last_pushed_ts
+        self.volatile_last_pushed: Dict[Tuple[str, str, Side], float] = {}
+
         # 背离缓存：记录每个 (symbol, interval) 最近一次触发背离的时间（人可读字符串）
         self.divergence_cache: Dict[Tuple[str, str], str] = {}
 
@@ -258,6 +264,27 @@ class AppState:
 
     def record_ema55_push(self, symbol: str, side: Side, now_ts: float) -> None:
         self.ema55_last_pushed[(symbol, side)] = now_ts
+
+    def update_volatile(self, symbol: str, interval: str, now_ts: float) -> None:
+        candle_sec = self.interval_seconds.get(interval, 3600)
+        self.volatile_expiry[(symbol, interval)] = now_ts + candle_sec * 1.5
+
+    def is_volatile_active(self, symbol: str, interval: str, now_ts: float) -> bool:
+        expiry = self.volatile_expiry.get((symbol, interval))
+        if expiry is None:
+            return False
+        return now_ts < expiry
+
+    def is_volatile_in_cooldown(
+        self, symbol: str, interval: str, side: Side, now_ts: float, cooldown_seconds: float
+    ) -> bool:
+        last_ts = self.volatile_last_pushed.get((symbol, interval, side))
+        if last_ts is None:
+            return False
+        return (now_ts - last_ts) < cooldown_seconds
+
+    def record_volatile_push(self, symbol: str, interval: str, side: Side, now_ts: float) -> None:
+        self.volatile_last_pushed[(symbol, interval, side)] = now_ts
 
     def is_zone_warm(self, symbol: str, interval: str, role: str, now_ts: float) -> bool:
         touch_ts = self.zone_touch_cache.get((symbol, interval, role))

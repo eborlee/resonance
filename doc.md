@@ -9,6 +9,11 @@
 - universe完善
 - config梳理优化
 - 推送文本优化
+- 波动预警反向合成（ob/os 事件反查波动预警状态）
+    - 当前只有波动预警触发时检查 ob/os，存在最多 1 根 K 线的延迟（1h 延迟 1h，4h 延迟 4h）
+    - 可在 ob/os 信号进入 IN 时，顺手检查 is_volatile_active，若 active 则立即推送
+    - 冷冻共用同一套 (symbol, interval, side) key，不会重复推
+    - 待确认：检查哪些 volatile interval、推送用哪个 topic
 
 
 docker compose up -d --build

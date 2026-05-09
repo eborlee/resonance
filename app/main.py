@@ -8,11 +8,12 @@ from fastapi import FastAPI, Request
 from .config import settings
 from .infra.store import AppState
 from .adapters.tg_client import TelegramClient
-from .adapters.tv_parser import parse_tv_payload, parse_zone_payload, parse_ema_payload, parse_divergence_payload
+from .adapters.tv_parser import parse_tv_payload, parse_zone_payload, parse_ema_payload, parse_divergence_payload, parse_volatile_payload
 from .services.resonance_service import ResonanceService
 from .services.zone_service import ZoneService
 from .services.ema_service import EmaService
 from .services.divergence_service import DivergenceService
+from .services.volatile_service import VolatileService
 from .services.tg_command_handler import polling_loop
 import logging
 from .infra.logger_config import setup_logging
@@ -52,6 +53,7 @@ svc = ResonanceService(state=state, tg=tg)
 zone_svc = ZoneService(state=state, tg=tg)
 ema_svc = EmaService(state=state, tg=tg)
 divergence_svc = DivergenceService(state=state, tg=tg)
+volatile_svc = VolatileService(state=state, tg=tg)
 
 
 @asynccontextmanager
@@ -81,6 +83,17 @@ async def tradingview_webhook(req: Request):
     except Exception as e:
         await svc.handle_raw_text_fallback(req, err=e)
         return {"ok": True, "fallback": True}
+
+    # volatile 波动预警单独分发
+    if payload.get("event") == "volatile":
+        try:
+            volatile_event = parse_volatile_payload(payload)
+            if volatile_event is None:
+                return {"ok": True, "ignored": True}
+            await volatile_svc.handle_event(volatile_event)
+        except Exception:
+            logger.error("volatile_service 处理异常", exc_info=True)
+        return {"ok": True}
 
     # divergence 单独分发
     if payload.get("event") == "divergence":

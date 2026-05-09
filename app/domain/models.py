@@ -80,3 +80,10 @@ class DivergenceEvent:
     symbol: str
     interval: str   # normalized: "1h", "4h"
     ts: float
+
+
+@dataclass(frozen=True)
+class VolatileEvent:
+    symbol: str
+    interval: str   # normalized: "1h", "4h"
+    ts: float

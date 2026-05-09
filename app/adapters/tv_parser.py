@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Tuple, Optional
 import time
 import re
 
-from ..domain.models import IntervalSignal, TvEvent, ZoneEvent, EmaEvent, DivergenceEvent
+from ..domain.models import IntervalSignal, TvEvent, ZoneEvent, EmaEvent, DivergenceEvent, VolatileEvent
 
 from datetime import datetime, timezone
 
@@ -292,6 +292,34 @@ def parse_divergence_payload(payload: Dict[str, Any]) -> Optional[DivergenceEven
     ts = parse_ts(raw_ts)
 
     return DivergenceEvent(symbol=symbol, interval=interval, ts=ts)
+
+
+def parse_volatile_payload(payload: Dict[str, Any]) -> Optional[VolatileEvent]:
+    """
+    解析波动预警 TV Webhook payload：
+
+    {
+      "symbol": "{{ticker}}",
+      "interval": "{{interval}}",
+      "event": "volatile",
+      "indicator": "波段过滤器",
+      "value": "",
+      "desc": "▼ 波动预警"
+    }
+    """
+    raw_symbol = payload.get("symbol") or payload.get("ticker") or ""
+    symbol = normalize_symbol(str(raw_symbol))
+    if not symbol:
+        return None
+
+    interval = map_interval(payload.get("interval"))
+    if interval is None:
+        return None
+
+    raw_ts = payload.get("timenow") or payload.get("ts")
+    ts = parse_ts(raw_ts)
+
+    return VolatileEvent(symbol=symbol, interval=interval, ts=ts)
 
 
 def parse_zone_payload(payload: Dict[str, Any]) -> Optional[ZoneEvent]:
