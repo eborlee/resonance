@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     TG_OWNER_CHAT_ID: str  # 机器人命令交互的个人私聊 chat_id
 
     # 你新的 topic 分层（按最大周期路由）
-    TG_TOPIC_WEEK: int
+    TG_TOPIC_US: int
     TG_TOPIC_DAY: int
     TG_TOPIC_4H: int
     TG_TOPIC_1H: int
@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     ROUTING_PATH: str = "config/routing.yaml"
 
     # K线图天数配置
+    CHART_1D_DAYS: int = 120  # 日线：显示最近N天的日线K线
     CHART_4H_DAYS: int = 14   # 4h频道：拉取最近N天的4h K线
     CHART_1H_DAYS: int = 5    # 1h频道：拉取最近N天的1h K线
 
@@ -172,6 +173,14 @@ def get_main_topic_symbols() -> List[str]:
     with open(settings.UNIVERSE_PATH, "r", encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
     return [str(s) for s in (raw.get("main_topic_symbols") or [])]
+
+def get_us_stock_symbols() -> List[str]:
+    """读取 universe.yaml 顶层 us_stock_symbols 列表，热读支持热更新。"""
+    if not os.path.exists(settings.UNIVERSE_PATH):
+        return []
+    with open(settings.UNIVERSE_PATH, "r", encoding="utf-8") as f:
+        raw = yaml.safe_load(f) or {}
+    return [str(s) for s in (raw.get("us_stock_symbols") or [])]
 
 def get_routing_rules() -> Dict[str, Dict[str, str]]:
     return load_routing(settings.ROUTING_PATH)

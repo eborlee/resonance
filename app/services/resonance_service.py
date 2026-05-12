@@ -5,7 +5,7 @@ from fastapi import Request
 from typing import List, Dict
 from .resonance_combinations import canonical_combo, match_combinations_with_lifecycle, COMBINATION_ROUTING, SILENT_COMBINATIONS
 from .resonance_combinations import ALLOWED_COMBINATIONS
-from ..config import settings, universe, routing_rules,get_routing_rules,get_universe, get_main_topic_symbols
+from ..config import settings, universe, routing_rules,get_routing_rules,get_universe, get_main_topic_symbols, get_us_stock_symbols
 from ..domain.models import (
     Side,
     LevelState,
@@ -275,6 +275,7 @@ class ResonanceService:
             # Step 5️⃣：逐 topic（max_iv）执行推送
             send_tasks = []
             is_main_symbol = event2.symbol in get_main_topic_symbols()
+            is_us_stock = event2.symbol in get_us_stock_symbols()
 
             for max_iv, results in combo_results_by_max_iv.items():
                 if not results:
@@ -356,7 +357,11 @@ class ResonanceService:
                         f"{'UPGRADE' if is_upgrade else 'NEW'}"
                     )
 
-                    actual_topic = settings.TG_TOPIC_MAIN if is_main_symbol else topic_id
+                    actual_topic = (
+                        settings.TG_TOPIC_MAIN if is_main_symbol else
+                        settings.TG_TOPIC_US if is_us_stock else
+                        topic_id
+                    )
                     obos_str = " | ".join(f"{iv}{_side_zh(side)}" for iv in canon)
                     chart_title = f"{event2.symbol}  {max_iv}【共振】{obos_str}"
                     send_tasks.append(

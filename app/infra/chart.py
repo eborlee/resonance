@@ -21,8 +21,9 @@ _topic_locks: dict[int, asyncio.Lock] = {}
 
 BINANCE_FUTURES_KLINES = "https://fapi.binance.com/fapi/v1/klines"
 
-# max_iv → (binance接口interval字符串, 每天根数)
+# max_iv → 每天根数（用于计算 fetch_limit 和 display_n）
 _CANDLES_PER_DAY: dict[str, int] = {
+    "1D": 1,
     "4h": 6,   # 24h / 4h
     "1h": 24,  # 24h / 1h
 }
@@ -30,6 +31,18 @@ _CANDLES_PER_DAY: dict[str, int] = {
 # TradingView symbol → Binance合约实际symbol（命名不一致时补充）
 _TV_TO_BINANCE: dict[str, str] = {
     "RAYUSDT": "RAYSOLUSDT",
+}
+
+# TradingView symbol → yfinance symbol（Binance无法覆盖的品种）
+_TV_TO_YFINANCE: dict[str, str] = {
+    "WTI":    "CL=F",
+    "XAUUSD": "GC=F",
+    "SILVER": "SI=F",
+}
+
+# 项目内部 interval → Binance API interval（不一致时补充）
+_INTERNAL_TO_BINANCE_IV: dict[str, str] = {
+    "1D": "1d",
 }
 
 
@@ -58,6 +71,20 @@ async def _fetch_klines(symbol: str, interval: str, limit: int) -> Optional[list
         return None
 
 
+def _binance_to_df(klines: list) -> "pd.DataFrame":
+    """将 Binance K线列表转为标准 OHLCV DataFrame（index=DatetimeIndex UTC）。"""
+    import pandas as pd
+    df = pd.DataFrame(klines, columns=[
+        "Open_time", "Open", "High", "Low", "Close", "Volume",
+        "Close_time", "Quote_vol", "Trades", "Taker_base", "Taker_quote", "Ignore",
+    ])
+    df["Open_time"] = pd.to_datetime(df["Open_time"], unit="ms", utc=True)
+    df.set_index("Open_time", inplace=True)
+    for col in ["Open", "High", "Low", "Close", "Volume"]:
+        df[col] = df[col].astype(float)
+    return df[["Open", "High", "Low", "Close", "Volume"]]
+
+
 def _compute_ema(prices: list[float], period: int) -> list[float]:
     """计算EMA序列，前period-1个值填nan。"""
     result = [math.nan] * len(prices)
@@ -70,6 +97,79 @@ def _compute_ema(prices: list[float], period: int) -> list[float]:
         ema = prices[i] * k + ema * (1.0 - k)
         result[i] = ema
     return result
+
+
+def _yfinance_fetch_sync(symbol: str, interval: str, limit: int) -> Optional["pd.DataFrame"]:
+    """
+    同步版 yfinance 拉取，在 executor 中运行。
+    interval: "1h" / "4h"（由 1h resample 合成）/ "1D"。
+
+    days_needed 换算逻辑：
+      - 1D：1根=1交易日，交易日≈日历天×5/7，所以 limit×(7/5) 个日历天
+      - 1h：美股约每交易日6根1h，换算到交易日后再×(7/5)得日历天
+      - 4h：先拉 limit×4 根 1h，再 resample，天数同 1h 逻辑
+    """
+    import yfinance as yf
+    import pandas as pd
+    import datetime
+
+    yf_symbol = _TV_TO_YFINANCE.get(symbol.upper(), symbol.upper())
+
+    if interval == "1D":
+        days_needed = math.ceil(limit * 7 / 5) + 30
+        yf_interval = "1d"
+        resample_to = None
+    elif interval == "4h":
+        days_needed = min(math.ceil(limit * 4 / 6 * 7 / 5) + 30, 728)
+        yf_interval = "1h"
+        resample_to = "4h"
+    else:  # 1h
+        days_needed = min(math.ceil(limit / 6 * 7 / 5) + 30, 728)
+        yf_interval = "1h"
+        resample_to = None
+
+    start = datetime.datetime.now(tz=datetime.timezone.utc) - datetime.timedelta(days=days_needed)
+
+    try:
+        ticker = yf.Ticker(yf_symbol)
+        df = ticker.history(interval=yf_interval, start=start)
+    except Exception:
+        return None
+
+    if df is None or df.empty:
+        return None
+
+    if df.index.tz is None:
+        df.index = df.index.tz_localize("UTC")
+    else:
+        df.index = df.index.tz_convert("UTC")
+    df.index.name = "Open_time"
+
+    df = df[["Open", "High", "Low", "Close", "Volume"]].copy().astype(float)
+
+    if resample_to:
+        df = df.resample(resample_to).agg({
+            "Open": "first",
+            "High": "max",
+            "Low": "min",
+            "Close": "last",
+            "Volume": "sum",
+        }).dropna(subset=["Open", "Close"])
+
+    if df.empty:
+        return None
+
+    return df.tail(limit)
+
+
+async def _fetch_klines_yfinance(symbol: str, interval: str, limit: int) -> Optional["pd.DataFrame"]:
+    """yfinance 拉取的异步包装，在线程池中执行同步调用。"""
+    loop = asyncio.get_event_loop()
+    try:
+        return await loop.run_in_executor(None, _yfinance_fetch_sync, symbol, interval, limit)
+    except Exception:
+        logger.warning(f"[Chart] yfinance 获取失败: {symbol}/{interval}", exc_info=True)
+        return None
 
 
 _CJK_FONT_LOADED = False
@@ -131,7 +231,7 @@ def _ensure_cjk_font() -> None:
 def _draw_chart(
     symbol: str,
     interval_label: str,
-    klines: list,
+    df: "pd.DataFrame",
     display_n: Optional[int] = None,
     zone_bot: Optional[float] = None,
     zone_top: Optional[float] = None,
@@ -140,19 +240,9 @@ def _draw_chart(
     chart_title: Optional[str] = None,
     price_label: Optional[str] = None,
 ) -> bytes:
-    import pandas as pd
     import mplfinance as mpf
     import matplotlib.pyplot as plt
     _ensure_cjk_font()
-
-    df = pd.DataFrame(klines, columns=[
-        "Open_time", "Open", "High", "Low", "Close", "Volume",
-        "Close_time", "Quote_vol", "Trades", "Taker_base", "Taker_quote", "Ignore",
-    ])
-    df["Open_time"] = pd.to_datetime(df["Open_time"], unit="ms", utc=True)
-    df.set_index("Open_time", inplace=True)
-    for col in ["Open", "High", "Low", "Close", "Volume"]:
-        df[col] = df[col].astype(float)
 
     closes = df["Close"].tolist()
 
@@ -247,28 +337,34 @@ async def generate_chart(
 ) -> Optional[bytes]:
     """
     生成带EMA21/55/100/200的K线图（PNG字节）。
-    仅对max_iv为"4h"或"1h"生效，其他返回None。
-    zone_bot/zone_top/zone_role：可选，传入时在图上叠加半透明价格区域。
-    任何异常均返回None，不影响调用方。
+    max_iv 须在 _CANDLES_PER_DAY 中定义，否则返回 None。
+    数据源：优先 Binance Futures，失败时 fallback 到 yfinance（覆盖美股/大宗商品）。
+    任何异常均返回 None，不影响调用方。
     """
     candles_per_day = _CANDLES_PER_DAY.get(max_iv)
     if candles_per_day is None:
         return None
 
-    binance_iv = max_iv  # 4h/1h 与 Binance 接口字符串一致
-    days = settings.CHART_4H_DAYS if max_iv == "4h" else settings.CHART_1H_DAYS
+    binance_iv = _INTERNAL_TO_BINANCE_IV.get(max_iv, max_iv)
+    days = {"1D": settings.CHART_1D_DAYS, "4h": settings.CHART_4H_DAYS}.get(max_iv, settings.CHART_1H_DAYS)
     display_n = days * candles_per_day
-    # EMA200 收敛需要足够多的预热K线：200根仅够初始化SMA，偏差仍剩~14%；
-    # 500根后偏差降至<1%，且远低于Binance单次1500根上限
     fetch_limit = display_n + 500
-    label = f"{binance_iv.upper()} · {days}d"
+    label = f"{max_iv.upper()} · {days}d"
 
+    # 优先 Binance，失败 fallback yfinance
+    df = None
     klines = await _fetch_klines(symbol, binance_iv, fetch_limit)
-    if not klines:
+    if klines:
+        df = _binance_to_df(klines)
+    else:
+        logger.info(f"[Chart] Binance 无数据，尝试 yfinance: {symbol}/{max_iv}")
+        df = await _fetch_klines_yfinance(symbol, max_iv, fetch_limit)
+
+    if df is None:
         return None
 
     try:
-        return _draw_chart(symbol, label, klines, display_n=display_n, zone_bot=zone_bot, zone_top=zone_top, zone_role=zone_role, price_level=price_level, chart_title=chart_title, price_label=price_label)
+        return _draw_chart(symbol, label, df, display_n=display_n, zone_bot=zone_bot, zone_top=zone_top, zone_role=zone_role, price_level=price_level, chart_title=chart_title, price_label=price_label)
     except Exception:
         logger.warning(f"[Chart] 绘图失败: {symbol}/{max_iv}", exc_info=True)
         return None

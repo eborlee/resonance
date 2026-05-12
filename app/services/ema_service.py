@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import List, Tuple
 
-from ..config import settings, get_universe, get_main_topic_symbols
+from ..config import settings, get_universe, get_main_topic_symbols, get_us_stock_symbols
 from ..domain.models import EmaEvent, Side, LevelState
 from ..infra.store import AppState
 from ..adapters.tg_client import TelegramClient
@@ -78,7 +78,13 @@ class EmaService:
             logger.warning(f"EMA200 interval 无对应topic配置: {event.interval}")
             return
         topic_id = getattr(settings, topic_attr)
-        actual_topic = settings.TG_TOPIC_MAIN if event.symbol in get_main_topic_symbols() else topic_id
+        _is_main = event.symbol in get_main_topic_symbols()
+        _is_us = event.symbol in get_us_stock_symbols()
+        actual_topic = (
+            settings.TG_TOPIC_MAIN if _is_main else
+            settings.TG_TOPIC_US if _is_us else
+            topic_id
+        )
 
         obos_str = " | ".join(
             f"{obos_iv}{'超买' if side == Side.OVERBOUGHT else '超卖'}"
@@ -149,7 +155,12 @@ class EmaService:
             return
 
         is_main = event.symbol in get_main_topic_symbols()
-        topic_id = settings.TG_TOPIC_MAIN if is_main else settings.TG_TOPIC_1H
+        is_us = event.symbol in get_us_stock_symbols()
+        topic_id = (
+            settings.TG_TOPIC_MAIN if is_main else
+            settings.TG_TOPIC_US if is_us else
+            settings.TG_TOPIC_1H
+        )
 
         for side in matched_sides:
             self.state.record_ema55_push(event.symbol, side, now_ts)

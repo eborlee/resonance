@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from ..config import settings, get_universe
+from ..config import settings, get_universe, get_main_topic_symbols, get_us_stock_symbols
 from ..domain.models import DivergenceEvent, Side
 from ..infra.store import AppState
 from ..adapters.tg_client import TelegramClient
@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 # 支持的周期 → 推送 topic 的 settings 字段名
 DIVERGENCE_INTERVAL_TO_TOPIC_ATTR: dict[str, str] = {
+    "1D": "TG_TOPIC_DAY",
     "4h": "TG_TOPIC_4H",
     "1h": "TG_TOPIC_1H",
 }
@@ -79,7 +80,14 @@ class DivergenceService:
         if topic_attr is None:
             logger.warning(f"Divergence interval 无对应topic配置: {event.interval}")
             return
-        topic_id = getattr(settings, topic_attr)
+        base_topic = getattr(settings, topic_attr)
+        is_main = event.symbol in get_main_topic_symbols()
+        is_us = event.symbol in get_us_stock_symbols()
+        topic_id = (
+            settings.TG_TOPIC_MAIN if is_main else
+            settings.TG_TOPIC_US if is_us else
+            base_topic
+        )
 
         # Step 5：推送
         msg = _format_message(event, in_sides)

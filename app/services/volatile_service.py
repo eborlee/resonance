@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import List, Tuple
 
-from ..config import settings, get_universe, get_main_topic_symbols
+from ..config import settings, get_universe, get_main_topic_symbols, get_us_stock_symbols
 from ..domain.models import VolatileEvent, Side, LevelState
 from ..infra.store import AppState
 from ..adapters.tg_client import TelegramClient
@@ -20,6 +20,7 @@ _OBOS_CHECK_INTERVALS = ("4h", "1h")
 
 # 波动预警 interval → TG topic 属性名
 _VOLATILE_TOPIC_MAP = {
+    "1D": "TG_TOPIC_DAY",
     "1h": "TG_TOPIC_1H",
     "4h": "TG_TOPIC_4H",
 }
@@ -56,7 +57,12 @@ class VolatileService:
 
         topic_id = getattr(settings, topic_attr)
         is_main = event.symbol in get_main_topic_symbols()
-        actual_topic = settings.TG_TOPIC_MAIN if is_main else topic_id
+        is_us = event.symbol in get_us_stock_symbols()
+        actual_topic = (
+            settings.TG_TOPIC_MAIN if is_main else
+            settings.TG_TOPIC_US if is_us else
+            topic_id
+        )
 
         for side in (Side.OVERBOUGHT, Side.OVERSOLD):
             # 收集处于 IN 或 WARM 的 ob/os 周期

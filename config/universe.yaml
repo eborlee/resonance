@@ -1,4 +1,5 @@
 main_topic_symbols: [BTCUSDT, ETHUSDT, WTI, XAUUSD]
+us_stock_symbols: []
 
 symbols:
   AAVEUSDT:

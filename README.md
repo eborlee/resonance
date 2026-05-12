@@ -105,7 +105,7 @@ docker compose up -d --build
 ```env
 TG_BOT_TOKEN=your_bot_token
 TG_CHAT_ID=your_chat_id
-TG_TOPIC_WEEK=111
+TG_TOPIC_US=111
 TG_TOPIC_DAY=222
 TG_TOPIC_4H=333
 TG_TOPIC_1H=444
