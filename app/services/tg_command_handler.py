@@ -85,7 +85,7 @@ def _handle_zone(state: AppState, symbol: str, now_ts: float) -> str:
     symbol = symbol.upper()
     lines = [f"📍 {symbol} Zone 触及状态"]
     found = False
-    for (sym, iv, role), touch_ts in state.zone_touch_cache.items():
+    for (sym, iv, role), (touch_ts, _, _) in state.zone_touch_cache.items():
         if sym != symbol:
             continue
         found = True

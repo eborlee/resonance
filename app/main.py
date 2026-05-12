@@ -136,6 +136,10 @@ async def tradingview_webhook(req: Request):
             return {"ok": True, "ignored": True}
 
         await svc.handle_event(event)
+        try:
+            await zone_svc.handle_obos_reverse(event)
+        except Exception:
+            logger.error("zone_svc.handle_obos_reverse 处理异常", exc_info=True)
         return {"ok": True}
 
     except Exception as e:

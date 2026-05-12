@@ -79,8 +79,8 @@ class AppState:
         }
         """
 
-        # zone 触及缓存：记录每个 (symbol, interval, role) 最近一次触及的时间戳
-        self.zone_touch_cache: Dict[Tuple[str, str, str], float] = {}
+        # zone 触及缓存：记录每个 (symbol, interval, role) 最近一次触及的 (ts, top, bot)
+        self.zone_touch_cache: Dict[Tuple[str, str, str], Tuple[float, float, float]] = {}
 
         # zone+obos 组合冷冻门控：key=(symbol, zone_iv, obos_iv, side) → last_pushed_ts
         self.zone_combo_last_pushed: Dict[Tuple[str, str, str, Side], float] = {}
@@ -195,8 +195,8 @@ class AppState:
     # =========================================================
     # Zone 触及状态管理
     # =========================================================
-    def update_zone_touch(self, symbol: str, interval: str, role: str, ts: float) -> None:
-        self.zone_touch_cache[(symbol, interval, role)] = ts
+    def update_zone_touch(self, symbol: str, interval: str, role: str, ts: float, top: float = 0.0, bot: float = 0.0) -> None:
+        self.zone_touch_cache[(symbol, interval, role)] = (ts, top, bot)
 
     def is_zone_combo_in_cooldown(
         self,
@@ -287,9 +287,10 @@ class AppState:
         self.volatile_last_pushed[(symbol, interval, side)] = now_ts
 
     def is_zone_warm(self, symbol: str, interval: str, role: str, now_ts: float) -> bool:
-        touch_ts = self.zone_touch_cache.get((symbol, interval, role))
-        if touch_ts is None:
+        entry = self.zone_touch_cache.get((symbol, interval, role))
+        if entry is None:
             return False
+        touch_ts, _, _ = entry
         candle_sec = self.interval_seconds.get(interval)
         if candle_sec is None:
             return False
