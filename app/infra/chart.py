@@ -123,6 +123,12 @@ def _yfinance_fetch_sync(symbol: str, interval: str, limit: int) -> Optional["pd
         days_needed = min(math.ceil(limit * 4 / 6 * 7 / 5) + 30, 728)
         yf_interval = "1h"
         resample_to = "4h"
+    elif interval == "15m":
+        days_needed = min(limit // 26 + 5, 59)  # yfinance 15m 限60天，美股~26根/交易日
+        yf_interval = "15m"
+        resample_to = None
+    elif interval == "3m":
+        return None  # yfinance 不支持 3m
     else:  # 1h
         days_needed = min(math.ceil(limit / 6 * 7 / 5) + 30, 728)
         yf_interval = "1h"
@@ -325,6 +331,23 @@ def _draw_chart(
     return buf.read()
 
 
+def _vstack_pngs(chart_bytes_list: list[bytes]) -> bytes:
+    """将多张 PNG 字节垂直拼接为一张图。"""
+    from PIL import Image
+    images = [Image.open(io.BytesIO(b)).convert("RGB") for b in chart_bytes_list]
+    max_w = max(img.width for img in images)
+    total_h = sum(img.height for img in images)
+    combined = Image.new("RGB", (max_w, total_h), (255, 255, 255))
+    y = 0
+    for img in images:
+        combined.paste(img, (0, y))
+        y += img.height
+    buf = io.BytesIO()
+    combined.save(buf, format="PNG")
+    buf.seek(0)
+    return buf.read()
+
+
 async def generate_chart(
     symbol: str,
     max_iv: str,
@@ -341,15 +364,20 @@ async def generate_chart(
     数据源：优先 Binance Futures，失败时 fallback 到 yfinance（覆盖美股/大宗商品）。
     任何异常均返回 None，不影响调用方。
     """
-    candles_per_day = _CANDLES_PER_DAY.get(max_iv)
-    if candles_per_day is None:
-        return None
-
     binance_iv = _INTERNAL_TO_BINANCE_IV.get(max_iv, max_iv)
-    days = {"1D": settings.CHART_1D_DAYS, "4h": settings.CHART_4H_DAYS}.get(max_iv, settings.CHART_1H_DAYS)
-    display_n = days * candles_per_day
-    fetch_limit = display_n + 500
-    label = f"{max_iv.upper()} · {days}d"
+
+    if max_iv in ("15m", "3m"):
+        display_n = settings.CHART_15M_BARS if max_iv == "15m" else settings.CHART_3M_BARS
+        fetch_limit = display_n + 200
+        label = max_iv.upper()
+    else:
+        candles_per_day = _CANDLES_PER_DAY.get(max_iv)
+        if candles_per_day is None:
+            return None
+        days = {"1D": settings.CHART_1D_DAYS, "4h": settings.CHART_4H_DAYS}.get(max_iv, settings.CHART_1H_DAYS)
+        display_n = days * candles_per_day
+        fetch_limit = display_n + 500
+        label = f"{max_iv.upper()} · {days}d"
 
     # 优先 Binance，失败 fallback yfinance
     df = None
@@ -400,6 +428,49 @@ async def _try_send_chart(
         logger.warning(f"[Chart] 发送失败: {symbol}/{max_iv}", exc_info=True)
 
 
+async def generate_multi_chart(
+    symbol: str,
+    intervals: list[str],
+    zone_bot: Optional[float] = None,
+    zone_top: Optional[float] = None,
+    zone_role: Optional[str] = None,
+    price_level: Optional[float] = None,
+    chart_title: Optional[str] = None,
+    price_label: Optional[str] = None,
+) -> Optional[bytes]:
+    """并发生成多个周期的K线图并垂直拼接为一张图。"""
+    tasks = [
+        generate_chart(
+            symbol, iv,
+            zone_bot=zone_bot, zone_top=zone_top, zone_role=zone_role,
+            price_level=price_level,
+            chart_title=f"{chart_title}  [{iv}]" if chart_title else f"{symbol}  {iv}",
+            price_label=price_label,
+        )
+        for iv in intervals
+    ]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    chart_bytes = [r for r in results if isinstance(r, bytes) and r]
+    if not chart_bytes:
+        return None
+    if len(chart_bytes) == 1:
+        return chart_bytes[0]
+    try:
+        return _vstack_pngs(chart_bytes)
+    except Exception:
+        logger.warning(f"[Chart] 多图合并失败: {symbol}", exc_info=True)
+        return chart_bytes[0]
+
+
+def _chart_intervals_for(max_iv: str) -> list[str]:
+    """根据信号最大周期决定要发送的3张图的周期组合。"""
+    if max_iv == "1D":
+        return ["1D", "4h", "1h"]
+    if max_iv in ("15m", "3m"):
+        return ["1h", "15m", "3m"]
+    return ["4h", "1h", "15m"]
+
+
 async def send_with_chart(
     tg: "TelegramClient",
     msg: str,
@@ -422,13 +493,13 @@ async def send_with_chart(
     lock = _topic_locks.setdefault(topic_id, asyncio.Lock())
     async with lock:
         await tg.send_message(chat_id=chat_id, text=msg, message_thread_id=topic_id)
-        await _try_send_chart(
-            tg, symbol, max_iv, chat_id,
-            message_thread_id=topic_id,
-            zone_bot=zone_bot,
-            zone_top=zone_top,
-            zone_role=zone_role,
-            price_level=price_level,
-            chart_title=chart_title,
-            price_label=price_label,
-        )
+        try:
+            photo = await generate_multi_chart(
+                symbol, _chart_intervals_for(max_iv),
+                zone_bot=zone_bot, zone_top=zone_top, zone_role=zone_role,
+                price_level=price_level, chart_title=chart_title, price_label=price_label,
+            )
+            if photo is not None:
+                await tg.send_photo(chat_id=chat_id, photo=photo, message_thread_id=topic_id)
+        except Exception:
+            logger.warning(f"[Chart] 多图发送失败: {symbol}/{max_iv}", exc_info=True)
