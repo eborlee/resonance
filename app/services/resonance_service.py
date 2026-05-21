@@ -403,15 +403,37 @@ class ResonanceService:
             return
 
         symbol, price, price_str = _parse_price_cross(text)
+
+        obos_lines = []
+        if symbol:
+            allowed_ivs = get_universe().get(symbol) or []
+            for iv in ("1D", "4h", "1h", "15m"):
+                if iv not in allowed_ivs:
+                    continue
+                rec = self.state.cache.get((symbol, iv))
+                if rec is None:
+                    continue
+                if rec.in_overbought:
+                    obos_lines.append(f"🔴 {iv} 超买 IN")
+                if rec.in_oversold:
+                    obos_lines.append(f"🟢 {iv} 超卖 IN")
+
+        msg = text if not obos_lines else text + "\n\nob/os:\n" + "\n".join(obos_lines)
+
+        # obos_lines 格式: "🔴 4h 超买 IN" → "4h超买"
+        obos_suffix = ("  |  " + " · ".join(
+            f"{l.split()[1]}{'超买' if '超买' in l else '超卖'}"
+            for l in obos_lines
+        )) if obos_lines else ""
         price_title = (
-            f"{symbol}  价格警报: {price_str}" if price_str
-            else f"{symbol}  价格警报"
+            f"{symbol}  价格警报: {price_str}{obos_suffix}" if price_str
+            else f"{symbol}  价格警报{obos_suffix}"
         )
 
         try:
             await send_with_chart(
                 tg=self.tg,
-                msg=text,
+                msg=msg,
                 chat_id=settings.TG_CHAT_ID,
                 topic_id=settings.TG_TOPIC_PRICE,
                 symbol=symbol,
