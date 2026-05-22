@@ -484,6 +484,7 @@ async def send_with_chart(
     price_level: Optional[float] = None,
     chart_title: Optional[str] = None,
     price_label: Optional[str] = None,
+    chart_ivs: Optional[list] = None,
 ) -> None:
     """
     在话题锁保护下，顺序发送文字消息和K线图。
@@ -495,7 +496,7 @@ async def send_with_chart(
         await tg.send_message(chat_id=chat_id, text=msg, message_thread_id=topic_id)
         try:
             photo = await generate_multi_chart(
-                symbol, _chart_intervals_for(max_iv),
+                symbol, chart_ivs if chart_ivs is not None else _chart_intervals_for(max_iv),
                 zone_bot=zone_bot, zone_top=zone_top, zone_role=zone_role,
                 price_level=price_level, chart_title=chart_title, price_label=price_label,
             )

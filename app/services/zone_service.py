@@ -175,6 +175,8 @@ class ZoneService:
             )
             msg = _format_zone_message(event, items)
             chart_title = f"{event.symbol}  {event.interval}【关键区域】{obos_str}"
+            obos_ivs = [obos_iv for _, obos_iv, _, _ in items]
+            chart_ivs = ["1h", "15m", "3m"] if any(iv in ("15m", "3m") for iv in obos_ivs) else None
             logger.warning(f"[Zone推送] {event.symbol} {event.interval} {event.role} topic={t_attr} matched={[(r[1], r[2].value) for r in items]}")
             await send_with_chart(
                 tg=self.tg,
@@ -187,6 +189,7 @@ class ZoneService:
                 zone_top=event.top,
                 zone_role=event.role,
                 chart_title=chart_title,
+                chart_ivs=chart_ivs,
             )
 
     async def handle_obos_reverse(self, event: TvEvent) -> None:
@@ -294,6 +297,7 @@ class ZoneService:
                             f"zone触及={ts_to_utc_str(touch_ts)}"
                         )
 
+                        chart_ivs = ["1h", "15m", "3m"] if obos_iv in ("15m", "3m") else None
                         await send_with_chart(
                             tg=self.tg,
                             msg=msg,
@@ -305,4 +309,5 @@ class ZoneService:
                             zone_top=top,
                             zone_role=role,
                             chart_title=chart_title,
+                            chart_ivs=chart_ivs,
                         )
