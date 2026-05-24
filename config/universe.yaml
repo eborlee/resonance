@@ -1,5 +1,5 @@
 main_topic_symbols: [BTCUSDT, ETHUSDT, WTI, XAUUSD]
-us_stock_symbols: []
+us_stock_symbols: [AAPL, MSFT, NVDA, TSLA, GOOGL, META, AMZN, AMD, SPY, QQQ, ORCL]
 
 symbols:
   AAVEUSDT:
@@ -52,7 +52,27 @@ symbols:
     intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
   OPUSDT:
     intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 1m, 30s]
+  AAPL:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 1m, 30s]
+  AMZN:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 1m, 30s]
+  AMD:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 1m, 30s]
+  GOOGL:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 1m, 30s]
+  META:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 1m, 30s]
+  MSFT:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 1m, 30s]
+  NVDA:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 1m, 30s]
   ORCL:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 1m, 30s]
+  QQQ:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 1m, 30s]
+  SPY:
+    intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 1m, 30s]
+  TSLA:
     intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 1m, 30s]
   PENGUUSDT:
     intervals: [1W, 1D, 4h, 1h, 15m, 5m, 3m, 30s]
