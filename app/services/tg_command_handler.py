@@ -11,6 +11,7 @@ from ..config import settings, get_universe
 from ..domain.models import Side, LevelState
 from ..infra.store import AppState
 from ..infra.stats import MessageStats
+from ..infra.chart import set_analysis_enabled, is_analysis_enabled
 from ..adapters.tg_client import TelegramClient
 from ..infra.utils import ts_to_utc_str
 
@@ -24,7 +25,8 @@ COMMANDS = """/cache <symbol>      — 各周期 IN/WARM/OUT 状态
 /add <symbol>        — 添加品种到 universe
 /remove <symbol>     — 从 universe 移除品种
 /universe            — 所有监控品种
-/stats               — 今日推送次数统计"""
+/stats               — 今日推送次数统计
+/analysis on|off     — 开启/关闭4h图表AI分析"""
 
 
 def _handle_cache(state: AppState, symbol: str, now_ts: float) -> str:
@@ -309,6 +311,17 @@ async def _process_update(update: dict, state: AppState, tg: TelegramClient, own
     elif cmd == "/stats":
         reply = _handle_stats(stats) if stats is not None else "统计模块未启用"
 
+    elif cmd == "/analysis":
+        if arg == "ON":
+            set_analysis_enabled(True)
+            reply = "✅ 4h 图表AI分析已开启"
+        elif arg == "OFF":
+            set_analysis_enabled(False)
+            reply = "⏹️ 4h 图表AI分析已关闭"
+        else:
+            status = "开启" if is_analysis_enabled() else "关闭"
+            reply = f"当前状态：{status}\n用法：/analysis on 或 /analysis off"
+
     elif cmd == "/help":
         reply = COMMANDS
 
@@ -331,6 +344,7 @@ COMMAND_MENU = [
     {"command": "remove",   "description": "从 universe 移除品种，如 /remove SOLUSDT"},
     {"command": "universe", "description": "列出所有监控品种"},
     {"command": "stats",    "description": "今日推送次数统计"},
+    {"command": "analysis", "description": "开启/关闭4h图表AI分析，如 /analysis on"},
     {"command": "help",     "description": "查看命令列表"},
 ]
 

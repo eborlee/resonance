@@ -11,6 +11,8 @@ import httpx
 
 if TYPE_CHECKING:
     from ..adapters.tg_client import TelegramClient
+    from ..services.chart_analysis import ChartAnalysisService
+    from .stats import MessageStats
 
 from ..config import settings
 
@@ -18,6 +20,30 @@ logger = logging.getLogger(__name__)
 
 # 按 topic_id 隔离的话题锁：同一 topic 的文字+图片串行发送，不同 topic 并发
 _topic_locks: dict[int, asyncio.Lock] = {}
+
+# Claude 图表分析集成
+_analysis_svc: Optional["ChartAnalysisService"] = None
+_analysis_enabled: bool = False
+_msg_stats: Optional["MessageStats"] = None
+
+
+def register_analysis(svc: "ChartAnalysisService") -> None:
+    global _analysis_svc
+    _analysis_svc = svc
+
+
+def register_stats(stats: "MessageStats") -> None:
+    global _msg_stats
+    _msg_stats = stats
+
+
+def set_analysis_enabled(enabled: bool) -> None:
+    global _analysis_enabled
+    _analysis_enabled = enabled
+
+
+def is_analysis_enabled() -> bool:
+    return _analysis_enabled
 
 BINANCE_FUTURES_KLINES = "https://fapi.binance.com/fapi/v1/klines"
 
@@ -485,6 +511,7 @@ async def send_with_chart(
     chart_title: Optional[str] = None,
     price_label: Optional[str] = None,
     chart_ivs: Optional[list] = None,
+    analysis_context: Optional[str] = None,
 ) -> None:
     """
     在话题锁保护下，顺序发送文字消息和K线图。
@@ -494,6 +521,7 @@ async def send_with_chart(
     lock = _topic_locks.setdefault(topic_id, asyncio.Lock())
     async with lock:
         await tg.send_message(chat_id=chat_id, text=msg, message_thread_id=topic_id)
+        photo: Optional[bytes] = None
         try:
             photo = await generate_multi_chart(
                 symbol, chart_ivs if chart_ivs is not None else _chart_intervals_for(max_iv),
@@ -504,3 +532,41 @@ async def send_with_chart(
                 await tg.send_photo(chat_id=chat_id, photo=photo, message_thread_id=topic_id)
         except Exception:
             logger.warning(f"[Chart] 多图发送失败: {symbol}/{max_iv}", exc_info=True)
+
+        if (
+            photo is not None
+            and topic_id == settings.TG_TOPIC_4H
+            and _analysis_svc is not None
+            and _analysis_enabled
+        ):
+            try:
+                analysis_text, usage = await _analysis_svc.analyze(
+                    image_bytes=photo,
+                    symbol=symbol,
+                    extra_context=analysis_context,
+                )
+                await tg.send_message(
+                    chat_id=chat_id,
+                    text=analysis_text,
+                    message_thread_id=topic_id,
+                )
+                if _msg_stats is not None:
+                    _msg_stats.record_tokens(
+                        input_tokens=usage.input_tokens,
+                        output_tokens=usage.output_tokens,
+                        cache_creation=usage.cache_creation_tokens,
+                        cache_read=usage.cache_read_tokens,
+                    )
+                    if _msg_stats.get_estimated_cost() > 1.0:
+                        set_analysis_enabled(False)
+                        logger.warning("[Analysis] 今日成本超过 $1.00，已自动关闭AI分析")
+                        try:
+                            await tg.send_message(
+                                chat_id=chat_id,
+                                text=f"⚠️ AI分析今日成本已超过 $1.00，已自动关闭。\n如需恢复请发送 /analysis on",
+                                message_thread_id=settings.TG_TOPIC_SUMMARY,
+                            )
+                        except Exception:
+                            logger.warning("[Analysis] 超限通知发送失败", exc_info=True)
+            except Exception:
+                logger.warning(f"[Analysis] 分析失败: {symbol}", exc_info=True)

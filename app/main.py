@@ -9,7 +9,10 @@ from fastapi import FastAPI, Request
 from .config import settings
 from .infra.store import AppState
 from .infra.stats import MessageStats
+from .infra.chart import register_analysis, register_stats
 from .adapters.tg_client import TelegramClient
+from .adapters.claude_client import ClaudeClient
+from .services.chart_analysis import ChartAnalysisService
 from .adapters.tv_parser import parse_tv_payload, parse_zone_payload, parse_ema_payload, parse_divergence_payload, parse_volatile_payload
 from .services.resonance_service import ResonanceService
 from .services.zone_service import ZoneService
@@ -52,6 +55,18 @@ state = AppState(
 # 消息统计
 msg_stats = MessageStats()
 
+# Claude 图表分析（ANTHROPIC_API_KEY 未配置时跳过）
+if settings.ANTHROPIC_API_KEY:
+    _claude_client = ClaudeClient(
+        api_key=settings.ANTHROPIC_API_KEY,
+        model=settings.CLAUDE_MODEL,
+        max_tokens=settings.CLAUDE_MAX_TOKENS,
+    )
+    register_analysis(ChartAnalysisService(_claude_client))
+    register_stats(msg_stats)
+else:
+    logger.warning("ANTHROPIC_API_KEY 未配置，图表分析功能已禁用")
+
 # Telegram client + 主服务
 tg = TelegramClient(bot_token=settings.TG_BOT_TOKEN, stats=msg_stats)
 svc = ResonanceService(state=state, tg=tg)
@@ -69,8 +84,8 @@ async def daily_summary_loop():
         )
         await asyncio.sleep((next_midnight - now).total_seconds())
 
-        counts = msg_stats.get_and_reset()
-        if not counts:
+        counts, tokens = msg_stats.get_and_reset()
+        if not counts and tokens.analysis_count == 0:
             continue
 
         topic_names = settings.topic_name_map()
@@ -83,6 +98,24 @@ async def daily_summary_loop():
             total += count
         lines.append(f"  ————")
         lines.append(f"  合计: {total} 条")
+
+        if tokens.analysis_count > 0:
+            cost = (
+                tokens.input_tokens * 3.00
+                + tokens.output_tokens * 15.00
+                + tokens.cache_creation_tokens * 3.75
+                + tokens.cache_read_tokens * 0.30
+            ) / 1_000_000
+            lines.append("")
+            lines.append("🤖 AI分析用量")
+            lines.append(f"  分析次数: {tokens.analysis_count}")
+            lines.append(f"  输入tokens: {tokens.input_tokens:,}")
+            lines.append(f"  输出tokens: {tokens.output_tokens:,}")
+            if tokens.cache_read_tokens:
+                lines.append(f"  缓存命中: {tokens.cache_read_tokens:,}")
+            if tokens.cache_creation_tokens:
+                lines.append(f"  缓存写入: {tokens.cache_creation_tokens:,}")
+            lines.append(f"  估算成本: ${cost:.4f}")
 
         try:
             await tg.send_message(

@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     TG_TOPIC_MAIN: int
     TG_TOPIC_SUMMARY: int
 
+    # Claude API
+    ANTHROPIC_API_KEY: str = ""
+    CLAUDE_MODEL: str = "claude-sonnet-4-6"
+    CLAUDE_MAX_TOKENS: int = 1024
+
     def topic_name_map(self) -> Dict[int | None, str]:
         mapping: Dict[int | None, str] = {None: "Direct"}
         for name, value in self.__dict__.items():

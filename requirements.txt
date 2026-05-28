@@ -1,3 +1,4 @@
+anthropic>=0.100.0
 matplotlib>=3.7.0
 Pillow>=9.0.0
 yfinance>=0.2.40
