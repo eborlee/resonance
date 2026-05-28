@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 
 from .config import settings
 from .infra.store import AppState
+from .infra.stats import MessageStats
 from .adapters.tg_client import TelegramClient
 from .adapters.tv_parser import parse_tv_payload, parse_zone_payload, parse_ema_payload, parse_divergence_payload, parse_volatile_payload
 from .services.resonance_service import ResonanceService
@@ -47,8 +49,11 @@ state = AppState(
     interval_seconds=settings.INTERVAL_SECONDS
 )
 
+# 消息统计
+msg_stats = MessageStats()
+
 # Telegram client + 主服务
-tg = TelegramClient(bot_token=settings.TG_BOT_TOKEN)
+tg = TelegramClient(bot_token=settings.TG_BOT_TOKEN, stats=msg_stats)
 svc = ResonanceService(state=state, tg=tg)
 zone_svc = ZoneService(state=state, tg=tg)
 ema_svc = EmaService(state=state, tg=tg)
@@ -56,15 +61,54 @@ divergence_svc = DivergenceService(state=state, tg=tg)
 volatile_svc = VolatileService(state=state, tg=tg)
 
 
+async def daily_summary_loop():
+    while True:
+        now = datetime.datetime.now(datetime.timezone.utc)
+        next_midnight = (now + datetime.timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        await asyncio.sleep((next_midnight - now).total_seconds())
+
+        counts = msg_stats.get_and_reset()
+        if not counts:
+            continue
+
+        topic_names = settings.topic_name_map()
+        date_str = now.strftime("%Y-%m-%d")
+        lines = [f"📊 {date_str} 推送汇总（UTC）"]
+        total = 0
+        for topic_id, count in sorted(counts.items(), key=lambda x: -(x[1])):
+            name = topic_names.get(topic_id, f"Topic#{topic_id}")
+            lines.append(f"  {name}: {count} 条")
+            total += count
+        lines.append(f"  ————")
+        lines.append(f"  合计: {total} 条")
+
+        try:
+            await tg.send_message(
+                chat_id=settings.TG_CHAT_ID,
+                text="\n".join(lines),
+                message_thread_id=settings.TG_TOPIC_SUMMARY,
+            )
+        except Exception:
+            logger.error("daily_summary 发送失败", exc_info=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     task = asyncio.create_task(
-        polling_loop(state=state, tg=tg, owner_chat_id=settings.TG_OWNER_CHAT_ID)
+        polling_loop(state=state, tg=tg, owner_chat_id=settings.TG_OWNER_CHAT_ID, stats=msg_stats)
     )
+    summary_task = asyncio.create_task(daily_summary_loop())
     yield
     task.cancel()
+    summary_task.cancel()
     try:
         await task
+    except asyncio.CancelledError:
+        pass
+    try:
+        await summary_task
     except asyncio.CancelledError:
         pass
 

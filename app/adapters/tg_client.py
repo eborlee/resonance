@@ -1,11 +1,15 @@
 from __future__ import annotations
 import httpx
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..infra.stats import MessageStats
 
 
 class TelegramClient:
-    def __init__(self, bot_token: str):
+    def __init__(self, bot_token: str, stats: Optional["MessageStats"] = None):
         self.base = f"https://api.telegram.org/bot{bot_token}"
+        self._stats = stats
 
     async def send_message(self, chat_id: str, text: str, message_thread_id: int | None = None):
         payload = {"chat_id": chat_id, "text": text, "disable_web_page_preview": True}
@@ -15,6 +19,8 @@ class TelegramClient:
         async with httpx.AsyncClient(timeout=10.0) as client:
             r = await client.post(f"{self.base}/sendMessage", json=payload)
             r.raise_for_status()
+            if self._stats is not None:
+                self._stats.record(message_thread_id)
             return r.json()
 
     async def get_updates(self, offset: int | None = None, timeout: int = 20) -> List[Dict[str, Any]]:

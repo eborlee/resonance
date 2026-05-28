@@ -10,6 +10,7 @@ import yaml
 from ..config import settings, get_universe
 from ..domain.models import Side, LevelState
 from ..infra.store import AppState
+from ..infra.stats import MessageStats
 from ..adapters.tg_client import TelegramClient
 from ..infra.utils import ts_to_utc_str
 
@@ -22,7 +23,8 @@ COMMANDS = """/cache <symbol>      — 各周期 IN/WARM/OUT 状态
 /check <symbol>      — 查询品种是否在 universe 中
 /add <symbol>        — 添加品种到 universe
 /remove <symbol>     — 从 universe 移除品种
-/universe            — 所有监控品种"""
+/universe            — 所有监控品种
+/stats               — 今日推送次数统计"""
 
 
 def _handle_cache(state: AppState, symbol: str, now_ts: float) -> str:
@@ -200,6 +202,26 @@ def _handle_check(symbol: str) -> str:
         return f"❌ {symbol} 不在 universe 中"
 
 
+def _handle_stats(stats: MessageStats) -> str:
+    import datetime
+    counts = stats.get_current()
+    topic_names = settings.topic_name_map()
+    now = datetime.datetime.now(datetime.timezone.utc)
+    date_str = now.strftime("%Y-%m-%d")
+    lines = [f"📊 {date_str} 今日推送（UTC，截至 {now.strftime('%H:%M')}）"]
+    if not counts:
+        lines.append("  暂无推送")
+    else:
+        total = 0
+        for topic_id, count in sorted(counts.items(), key=lambda x: -(x[1])):
+            name = topic_names.get(topic_id, f"Topic#{topic_id}")
+            lines.append(f"  {name}: {count} 条")
+            total += count
+        lines.append(f"  ————")
+        lines.append(f"  合计: {total} 条")
+    return "\n".join(lines)
+
+
 def _handle_universe() -> str:
     uni = get_universe()
     lines = [f"🌐 监控品种（{len(uni)}个）"]
@@ -218,7 +240,7 @@ def _parse_command(text: str):
     return cmd, arg
 
 
-async def _process_update(update: dict, state: AppState, tg: TelegramClient, owner_chat_id: str) -> None:
+async def _process_update(update: dict, state: AppState, tg: TelegramClient, owner_chat_id: str, stats: MessageStats | None = None) -> None:
     msg = update.get("message")
     if not msg:
         return
@@ -284,6 +306,9 @@ async def _process_update(update: dict, state: AppState, tg: TelegramClient, own
     elif cmd == "/universe":
         reply = _handle_universe()
 
+    elif cmd == "/stats":
+        reply = _handle_stats(stats) if stats is not None else "统计模块未启用"
+
     elif cmd == "/help":
         reply = COMMANDS
 
@@ -305,11 +330,12 @@ COMMAND_MENU = [
     {"command": "add",      "description": "添加品种到 universe，如 /add SOLUSDT"},
     {"command": "remove",   "description": "从 universe 移除品种，如 /remove SOLUSDT"},
     {"command": "universe", "description": "列出所有监控品种"},
+    {"command": "stats",    "description": "今日推送次数统计"},
     {"command": "help",     "description": "查看命令列表"},
 ]
 
 
-async def polling_loop(state: AppState, tg: TelegramClient, owner_chat_id: str) -> None:
+async def polling_loop(state: AppState, tg: TelegramClient, owner_chat_id: str, stats: MessageStats | None = None) -> None:
     """后台 long-polling 循环，与 FastAPI 共用 asyncio 事件循环。"""
     logger.info("TG command polling 启动")
 
@@ -327,7 +353,7 @@ async def polling_loop(state: AppState, tg: TelegramClient, owner_chat_id: str) 
             updates = await tg.get_updates(offset=offset, timeout=20)
             for update in updates:
                 offset = update["update_id"] + 1
-                await _process_update(update, state, tg, owner_chat_id)
+                await _process_update(update, state, tg, owner_chat_id, stats)
         except asyncio.CancelledError:
             logger.info("TG command polling 停止")
             return

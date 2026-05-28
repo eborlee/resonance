@@ -24,6 +24,14 @@ class Settings(BaseSettings):
     TG_TOPIC_15MIN: int
     TG_TOPIC_PRICE: int
     TG_TOPIC_MAIN: int
+    TG_TOPIC_SUMMARY: int
+
+    def topic_name_map(self) -> Dict[int | None, str]:
+        mapping: Dict[int | None, str] = {None: "Direct"}
+        for name, value in self.__dict__.items():
+            if name.startswith("TG_TOPIC_"):
+                mapping[value] = name.removeprefix("TG_TOPIC_").title()
+        return mapping
 
     # Thresholds
     OB_LEVEL: float = 40.0
