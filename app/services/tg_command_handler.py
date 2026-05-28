@@ -207,6 +207,7 @@ def _handle_check(symbol: str) -> str:
 def _handle_stats(stats: MessageStats) -> str:
     import datetime
     counts = stats.get_current()
+    tokens = stats.get_token_stats()
     topic_names = settings.topic_name_map()
     now = datetime.datetime.now(datetime.timezone.utc)
     date_str = now.strftime("%Y-%m-%d")
@@ -221,6 +222,25 @@ def _handle_stats(stats: MessageStats) -> str:
             total += count
         lines.append(f"  ————")
         lines.append(f"  合计: {total} 条")
+
+    if tokens.analysis_count > 0:
+        cost = (
+            tokens.input_tokens * 3.00
+            + tokens.output_tokens * 15.00
+            + tokens.cache_creation_tokens * 3.75
+            + tokens.cache_read_tokens * 0.30
+        ) / 1_000_000
+        lines.append("")
+        lines.append("🤖 AI分析用量")
+        lines.append(f"  分析次数: {tokens.analysis_count}")
+        lines.append(f"  输入tokens: {tokens.input_tokens:,}")
+        lines.append(f"  输出tokens: {tokens.output_tokens:,}")
+        if tokens.cache_read_tokens:
+            lines.append(f"  缓存命中: {tokens.cache_read_tokens:,}")
+        if tokens.cache_creation_tokens:
+            lines.append(f"  缓存写入: {tokens.cache_creation_tokens:,}")
+        lines.append(f"  估算成本: ${cost:.4f}")
+
     return "\n".join(lines)
 
 
