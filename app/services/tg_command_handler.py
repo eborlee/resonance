@@ -21,6 +21,7 @@ COMMANDS = """/cache <symbol>      — 各周期 IN/WARM/OUT 状态
 /combo <symbol>      — 当前 active 共振组合
 /zone <symbol>       — zone 触及 warm 状态
 /divergence <symbol> — 各周期上次背离触发时间
+/tracking            — 当前衰竭追踪窗口
 /check <symbol>      — 查询品种是否在 universe 中
 /add <symbol>        — 添加品种到 universe
 /remove <symbol>     — 从 universe 移除品种
@@ -244,6 +245,26 @@ def _handle_stats(stats: MessageStats) -> str:
     return "\n".join(lines)
 
 
+def _handle_tracking(state: AppState, now_ts: float) -> str:
+    windows = state.get_active_tracking_windows(now_ts)
+    if not windows:
+        return "🎯 当前无活跃追踪窗口"
+
+    lines = [f"🎯 追踪中（{len(windows)} 个）"]
+    for w in sorted(windows, key=lambda x: x.push_ts):
+        remaining_sec = int(w.push_ts + 2 * 3600 - now_ts)
+        mins = remaining_sec // 60
+        secs = remaining_sec % 60
+        side_label = "超买" if w.side.value == "overbought" else "超卖"
+        dot = "🔴" if w.side.value == "overbought" else "🟢"
+        lines.append(
+            f"  {dot} {w.symbol} {side_label}"
+            f"  推送于 {ts_to_utc_str(w.push_ts)}"
+            f"  剩余 {mins}m{secs:02d}s"
+        )
+    return "\n".join(lines)
+
+
 def _handle_universe() -> str:
     uni = get_universe()
     lines = [f"🌐 监控品种（{len(uni)}个）"]
@@ -307,6 +328,9 @@ async def _process_update(update: dict, state: AppState, tg: TelegramClient, own
         else:
             reply = _handle_divergence(state, arg)
 
+    elif cmd == "/tracking":
+        reply = _handle_tracking(state, now_ts)
+
     elif cmd == "/check":
         if not arg:
             reply = "用法: /check <symbol>，例如 /check BTCUSDT"
@@ -359,6 +383,7 @@ COMMAND_MENU = [
     {"command": "combo",    "description": "查询当前 active 共振组合，如 /combo ETHUSDT"},
     {"command": "zone",       "description": "查询 zone 触及 warm 状态，如 /zone BTCUSDT"},
     {"command": "divergence", "description": "查询各周期上次背离触发时间，如 /divergence BTCUSDT"},
+    {"command": "tracking",  "description": "查看当前活跃的衰竭追踪窗口"},
     {"command": "check",    "description": "查询品种是否在 universe 中，如 /check BTCUSDT"},
     {"command": "add",      "description": "添加品种到 universe，如 /add SOLUSDT"},
     {"command": "remove",   "description": "从 universe 移除品种，如 /remove SOLUSDT"},
