@@ -103,7 +103,7 @@ class VolatileService:
             chart_title = f"{event.symbol}  {event.interval}【波动预警】{side_label}"
             logger.warning(f"[波动预警推送] {event.symbol} {event.interval} {side.value}")
 
-            await send_with_chart(
+            msg_id = await send_with_chart(
                 tg=self.tg,
                 msg=msg,
                 chat_id=settings.TG_CHAT_ID,
@@ -112,3 +112,4 @@ class VolatileService:
                 max_iv=event.interval,
                 chart_title=chart_title,
             )
+            self.state.register_tracking_window(event.symbol, side, now_ts, actual_topic, msg_id)

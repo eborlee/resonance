@@ -97,7 +97,7 @@ class DivergenceService:
             for s in in_sides
         )
         chart_title = f"{event.symbol}  {event.interval}【顶底背离】{obos_str}"
-        await send_with_chart(
+        msg_id = await send_with_chart(
             tg=self.tg,
             msg=msg,
             chat_id=settings.TG_CHAT_ID,
@@ -106,3 +106,4 @@ class DivergenceService:
             max_iv=event.interval,
             chart_title=chart_title,
         )
+        self.state.register_tracking_window(event.symbol, in_sides[0], event.ts, topic_id, msg_id)

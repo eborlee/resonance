@@ -107,11 +107,13 @@ class EmaService:
                 symbol=event.symbol, ema200_iv=ema_iv,
                 obos_iv=obos_iv, side=side, now_ts=now_ts,
             )
-        await send_with_chart(
+        msg_id = await send_with_chart(
             tg=self.tg, msg="\n".join(msg_lines),
             chat_id=settings.TG_CHAT_ID, topic_id=actual_topic,
             symbol=event.symbol, max_iv=event.interval, chart_title=chart_title,
         )
+        for _, _, side, _ in active_matched:
+            self.state.register_tracking_window(event.symbol, side, now_ts, actual_topic, msg_id)
 
     # ────────────────────────────────────────────────
     # EMA55：触及 EMA55 + 1h15m 共振 active
@@ -178,8 +180,9 @@ class EmaService:
             ])
             chart_title = f"{event.symbol}  {event.interval}【EMA55触及】1h+15m {side_label}"
             logger.warning(f"[EMA55推送] {event.symbol} {side.value} 1h+15m active")
-            await send_with_chart(
+            msg_id = await send_with_chart(
                 tg=self.tg, msg=msg,
                 chat_id=settings.TG_CHAT_ID, topic_id=topic_id,
                 symbol=event.symbol, max_iv=event.interval, chart_title=chart_title,
             )
+            self.state.register_tracking_window(event.symbol, side, now_ts, topic_id, msg_id)

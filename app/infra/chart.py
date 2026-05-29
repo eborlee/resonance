@@ -512,15 +512,20 @@ async def send_with_chart(
     price_label: Optional[str] = None,
     chart_ivs: Optional[list] = None,
     analysis_context: Optional[str] = None,
-) -> None:
+    reply_to_message_id: Optional[int] = None,
+) -> Optional[int]:
     """
     在话题锁保护下，顺序发送文字消息和K线图。
     同一 topic_id 的发送串行执行，保证文字和图片之间不被其他事件插入。
     文字发送失败会抛出异常；图片失败静默忽略。
+    返回文字消息的 message_id（供后续消息引用）。
     """
     lock = _topic_locks.setdefault(topic_id, asyncio.Lock())
     async with lock:
-        await tg.send_message(chat_id=chat_id, text=msg, message_thread_id=topic_id)
+        msg_id = await tg.send_message(
+            chat_id=chat_id, text=msg, message_thread_id=topic_id,
+            reply_to_message_id=reply_to_message_id,
+        )
         photo: Optional[bytes] = None
         try:
             photo = await generate_multi_chart(
@@ -570,3 +575,4 @@ async def send_with_chart(
                             logger.warning("[Analysis] 超限通知发送失败", exc_info=True)
             except Exception:
                 logger.warning(f"[Analysis] 分析失败: {symbol}", exc_info=True)
+    return msg_id

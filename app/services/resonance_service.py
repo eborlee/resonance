@@ -273,7 +273,8 @@ class ResonanceService:
                 continue
             
             # Step 5️⃣：逐 topic（max_iv）执行推送
-            send_tasks = []
+            send_tasks: list = []
+            send_meta: list[tuple[Side, int]] = []  # 与 send_tasks 一一对应：(side, actual_topic)
             is_main_symbol = event2.symbol in get_main_topic_symbols()
             is_us_stock = event2.symbol in get_us_stock_symbols()
 
@@ -375,10 +376,14 @@ class ResonanceService:
                             chart_title=chart_title,
                         )
                     )
+                    send_meta.append((side, actual_topic))
 
             # ===== Step 5.4：统一并发执行外部 IO =====
             if send_tasks:
-                await asyncio.gather(*send_tasks, return_exceptions=True)
+                results = await asyncio.gather(*send_tasks, return_exceptions=True)
+                for (s, t_id), res in zip(send_meta, results):
+                    msg_id = res if isinstance(res, int) else None
+                    self.state.register_tracking_window(event2.symbol, s, event2.ts, t_id, msg_id)
 
     
     async def handle_raw_text_fallback(self, req: Request, err: Exception | None = None) -> None:

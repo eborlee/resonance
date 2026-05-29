@@ -178,7 +178,7 @@ class ZoneService:
             obos_ivs = [obos_iv for _, obos_iv, _, _ in items]
             chart_ivs = ["1h", "15m", "3m"] if any(iv in ("15m", "3m") for iv in obos_ivs) else None
             logger.warning(f"[Zone推送] {event.symbol} {event.interval} {event.role} topic={t_attr} matched={[(r[1], r[2].value) for r in items]}")
-            await send_with_chart(
+            msg_id = await send_with_chart(
                 tg=self.tg,
                 msg=msg,
                 chat_id=settings.TG_CHAT_ID,
@@ -191,6 +191,9 @@ class ZoneService:
                 chart_title=chart_title,
                 chart_ivs=chart_ivs,
             )
+            # 取最大 obos_iv 对应的 side 注册追踪
+            max_match = max(items, key=lambda m: settings.INTERVAL_ORDER.index(m[1]))
+            self.state.register_tracking_window(event.symbol, max_match[2], now_ts, actual_topic, msg_id)
 
     async def handle_obos_reverse(self, event: TvEvent) -> None:
         """
@@ -298,7 +301,7 @@ class ZoneService:
                         )
 
                         chart_ivs = ["1h", "15m", "3m"] if obos_iv in ("15m", "3m") else None
-                        await send_with_chart(
+                        msg_id = await send_with_chart(
                             tg=self.tg,
                             msg=msg,
                             chat_id=settings.TG_CHAT_ID,
@@ -311,3 +314,4 @@ class ZoneService:
                             chart_title=chart_title,
                             chart_ivs=chart_ivs,
                         )
+                        self.state.register_tracking_window(symbol, side, now_ts, actual_topic, msg_id)

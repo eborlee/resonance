@@ -20,6 +20,7 @@ from .services.ema_service import EmaService
 from .services.divergence_service import DivergenceService
 from .services.volatile_service import VolatileService
 from .services.tg_command_handler import polling_loop
+from .services.exhaustion_service import ExhaustionService, Ema21CrossEma200Rule
 import logging
 from .infra.logger_config import setup_logging
 
@@ -74,6 +75,9 @@ zone_svc = ZoneService(state=state, tg=tg)
 ema_svc = EmaService(state=state, tg=tg)
 divergence_svc = DivergenceService(state=state, tg=tg)
 volatile_svc = VolatileService(state=state, tg=tg)
+
+exhaustion_svc = ExhaustionService(state=state, tg=tg)
+exhaustion_svc.register_rule(Ema21CrossEma200Rule())
 
 
 async def daily_summary_loop():
@@ -133,17 +137,16 @@ async def lifespan(app: FastAPI):
         polling_loop(state=state, tg=tg, owner_chat_id=settings.TG_OWNER_CHAT_ID, stats=msg_stats)
     )
     summary_task = asyncio.create_task(daily_summary_loop())
+    exhaustion_task = asyncio.create_task(exhaustion_svc.run_forever())
     yield
     task.cancel()
     summary_task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
-    try:
-        await summary_task
-    except asyncio.CancelledError:
-        pass
+    exhaustion_task.cancel()
+    for t in (task, summary_task, exhaustion_task):
+        try:
+            await t
+        except asyncio.CancelledError:
+            pass
 
 app = FastAPI(lifespan=lifespan)
 

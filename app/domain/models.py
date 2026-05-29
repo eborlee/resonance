@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 
 class Side(str, Enum):
@@ -87,3 +87,16 @@ class VolatileEvent:
     symbol: str
     interval: str   # normalized: "1h", "4h"
     ts: float
+
+
+@dataclass
+class TrackingWindow:
+    symbol: str
+    side: Side
+    push_ts: float               # 推送时间（窗口起点）
+    topic_id: int                # 衰竭信号发到同一 topic
+    reply_to_message_id: Optional[int] = None  # 原推送消息 ID，用于 reply
+    alerted: bool = False
+
+    def is_expired(self, now_ts: float) -> bool:
+        return now_ts > self.push_ts + 2 * 3600

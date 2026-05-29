@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Tuple, List, Optional
 from collections import defaultdict
 from ..config import settings
-from ..domain.models import Side
+from ..domain.models import Side, TrackingWindow
 
 import logging
 logger = logging.getLogger(__name__)
@@ -99,6 +99,9 @@ class AppState:
 
         # 背离缓存：记录每个 (symbol, interval) 最近一次触发背离的时间（人可读字符串）
         self.divergence_cache: Dict[Tuple[str, str], str] = {}
+
+        # 衰竭追踪窗口：key=(symbol, side)，新推送覆盖旧窗口
+        self.tracking_windows: Dict[Tuple[str, Side], TrackingWindow] = {}
 
     # =========================================================
     # 更新某个周期的状态，同时记录“是否刚离开 IN”
@@ -285,6 +288,40 @@ class AppState:
 
     def record_volatile_push(self, symbol: str, interval: str, side: Side, now_ts: float) -> None:
         self.volatile_last_pushed[(symbol, interval, side)] = now_ts
+
+    # =========================================================
+    # 衰竭追踪窗口管理
+    # =========================================================
+    def register_tracking_window(
+        self,
+        symbol: str,
+        side: Side,
+        push_ts: float,
+        topic_id: int,
+        reply_to_message_id: Optional[int] = None,
+    ) -> None:
+        """注册或刷新追踪窗口。新推送直接覆盖，从头开始 2h 计时。"""
+        self.tracking_windows[(symbol, side)] = TrackingWindow(
+            symbol=symbol,
+            side=side,
+            push_ts=push_ts,
+            topic_id=topic_id,
+            reply_to_message_id=reply_to_message_id,
+        )
+        logger.info(f"[追踪] 注册窗口: {symbol} {side.value} push_ts={push_ts:.0f}")
+
+    def get_active_tracking_windows(self, now_ts: float) -> list[TrackingWindow]:
+        """返回所有未过期且未推送衰竭信号的窗口。"""
+        return [
+            w for w in self.tracking_windows.values()
+            if not w.alerted and not w.is_expired(now_ts)
+        ]
+
+    def mark_tracking_alerted(self, symbol: str, side: Side) -> None:
+        w = self.tracking_windows.get((symbol, side))
+        if w:
+            w.alerted = True
+            logger.info(f"[追踪] 已标记衰竭: {symbol} {side.value}")
 
     def is_zone_warm(self, symbol: str, interval: str, role: str, now_ts: float) -> bool:
         entry = self.zone_touch_cache.get((symbol, interval, role))
