@@ -6,10 +6,10 @@ import time
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional, TYPE_CHECKING
+from typing import Callable, Optional, TYPE_CHECKING
 
 from ..config import settings
-from ..domain.models import Side, TrackingWindow
+from ..domain.models import Side, TrackingWindow  # Side 也用于 on_push 类型注解
 from ..infra.store import AppState
 from ..infra.utils import ts_to_utc_str
 from ..infra.chart import _fetch_klines, _binance_to_df, _compute_ema, send_with_chart
@@ -146,6 +146,27 @@ class ExhaustionService:
         self.state = state
         self.tg = tg
         self._rules: list[ExhaustionRule] = []
+        self._skip_filters: list[Callable] = []
+
+    def add_skip_filter(self, fn: Callable) -> None:
+        """注册跳过函数：fn(**ctx) 返回 True 则不注册追踪窗口。"""
+        self._skip_filters.append(fn)
+
+    def on_push(
+        self,
+        symbol: str,
+        side: Side,
+        push_ts: float,
+        topic_id: int,
+        msg_id: Optional[int],
+        **ctx,
+    ) -> None:
+        """由各推送 service 在发送消息后调用，统一决策是否注册追踪窗口。"""
+        for f in self._skip_filters:
+            if f(**ctx):
+                logger.debug(f"[Exhaustion] {symbol} {side} 被 skip_filter 过滤，不追踪")
+                return
+        self.state.register_tracking_window(symbol, side, push_ts, topic_id, msg_id)
 
     def register_rule(self, rule: ExhaustionRule) -> None:
         self._rules.append(rule)

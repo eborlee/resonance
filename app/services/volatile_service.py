@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Tuple
+from typing import List, Tuple, TYPE_CHECKING
 
 from ..config import settings, get_universe, get_main_topic_symbols, get_us_stock_symbols
 from ..domain.models import VolatileEvent, Side, LevelState
@@ -10,6 +10,9 @@ from ..adapters.tg_client import TelegramClient
 from ..infra.utils import ts_to_utc_str
 from ..infra.chart import send_with_chart
 from .zone_service import _get_obos_state
+
+if TYPE_CHECKING:
+    from .exhaustion_service import ExhaustionService
 
 logger = logging.getLogger(__name__)
 
@@ -32,9 +35,10 @@ _STATE_LABEL = {
 
 
 class VolatileService:
-    def __init__(self, state: AppState, tg: TelegramClient):
+    def __init__(self, state: AppState, tg: TelegramClient, exhaustion_svc: "ExhaustionService"):
         self.state = state
         self.tg = tg
+        self.exhaustion_svc = exhaustion_svc
 
     async def handle_event(self, event: VolatileEvent) -> None:
         logger.info(f"[波动预警] 收到事件: {event.symbol} {event.interval}")
@@ -112,4 +116,4 @@ class VolatileService:
                 max_iv=event.interval,
                 chart_title=chart_title,
             )
-            self.state.register_tracking_window(event.symbol, side, now_ts, actual_topic, msg_id)
+            self.exhaustion_svc.on_push(event.symbol, side, now_ts, actual_topic, msg_id)

@@ -2,7 +2,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 from fastapi import Request
-from typing import List, Dict
+from typing import List, Dict, TYPE_CHECKING
 from .resonance_combinations import canonical_combo, match_combinations_with_lifecycle, COMBINATION_ROUTING, SILENT_COMBINATIONS
 from .resonance_combinations import ALLOWED_COMBINATIONS
 from ..config import settings, universe, routing_rules,get_routing_rules,get_universe, get_main_topic_symbols, get_us_stock_symbols
@@ -23,6 +23,9 @@ from .router import (
 )
 from ..infra.chart import send_with_chart
 from collections import defaultdict
+
+if TYPE_CHECKING:
+    from .exhaustion_service import ExhaustionService
 
 import logging
 logger = logging.getLogger(__name__)
@@ -104,9 +107,10 @@ class ResonanceService:
     - 匹配 combo 白名单并判断升级
     """
 
-    def __init__(self, state: AppState, tg: TelegramClient):
+    def __init__(self, state: AppState, tg: TelegramClient, exhaustion_svc: "ExhaustionService"):
         self.state = state
         self.tg = tg
+        self.exhaustion_svc = exhaustion_svc
 
     async def handle_event(self, event: TvEvent):
         logger.debug("  \n\n\n\n\n\n\n\n")
@@ -383,7 +387,7 @@ class ResonanceService:
                 results = await asyncio.gather(*send_tasks, return_exceptions=True)
                 for (s, t_id), res in zip(send_meta, results):
                     msg_id = res if isinstance(res, int) else None
-                    self.state.register_tracking_window(event2.symbol, s, event2.ts, t_id, msg_id)
+                    self.exhaustion_svc.on_push(event2.symbol, s, event2.ts, t_id, msg_id)
 
     
     async def handle_raw_text_fallback(self, req: Request, err: Exception | None = None) -> None:

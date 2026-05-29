@@ -70,14 +70,18 @@ else:
 
 # Telegram client + 主服务
 tg = TelegramClient(bot_token=settings.TG_BOT_TOKEN, stats=msg_stats)
-svc = ResonanceService(state=state, tg=tg)
-zone_svc = ZoneService(state=state, tg=tg)
-ema_svc = EmaService(state=state, tg=tg)
-divergence_svc = DivergenceService(state=state, tg=tg)
-volatile_svc = VolatileService(state=state, tg=tg)
 
 exhaustion_svc = ExhaustionService(state=state, tg=tg)
 exhaustion_svc.register_rule(Ema21CrossEma200Rule())
+exhaustion_svc.add_skip_filter(
+    lambda zone_iv=None, obos_iv=None, **_: zone_iv == "1h" and obos_iv == "15m"
+)
+
+svc = ResonanceService(state=state, tg=tg, exhaustion_svc=exhaustion_svc)
+zone_svc = ZoneService(state=state, tg=tg, exhaustion_svc=exhaustion_svc)
+ema_svc = EmaService(state=state, tg=tg, exhaustion_svc=exhaustion_svc)
+divergence_svc = DivergenceService(state=state, tg=tg, exhaustion_svc=exhaustion_svc)
+volatile_svc = VolatileService(state=state, tg=tg, exhaustion_svc=exhaustion_svc)
 
 
 async def daily_summary_loop():

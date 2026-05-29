@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from ..config import settings, get_universe, get_main_topic_symbols, get_us_stock_symbols
 from ..domain.models import DivergenceEvent, Side
@@ -9,6 +10,9 @@ from ..infra.store import AppState
 from ..adapters.tg_client import TelegramClient
 from ..infra.utils import ts_to_utc_str
 from ..infra.chart import send_with_chart
+
+if TYPE_CHECKING:
+    from .exhaustion_service import ExhaustionService
 
 logger = logging.getLogger(__name__)
 
@@ -49,9 +53,10 @@ def _format_message(event: DivergenceEvent, sides: list[Side]) -> str:
 
 
 class DivergenceService:
-    def __init__(self, state: AppState, tg: TelegramClient):
+    def __init__(self, state: AppState, tg: TelegramClient, exhaustion_svc: "ExhaustionService"):
         self.state = state
         self.tg = tg
+        self.exhaustion_svc = exhaustion_svc
 
     async def handle_event(self, event: DivergenceEvent) -> None:
         logger.info(f"收到Divergence事件: {event}")
@@ -106,4 +111,4 @@ class DivergenceService:
             max_iv=event.interval,
             chart_title=chart_title,
         )
-        self.state.register_tracking_window(event.symbol, in_sides[0], event.ts, topic_id, msg_id)
+        self.exhaustion_svc.on_push(event.symbol, in_sides[0], event.ts, topic_id, msg_id)

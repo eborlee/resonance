@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Tuple
+from typing import List, Tuple, TYPE_CHECKING
 
 from ..config import settings, get_universe, get_main_topic_symbols, get_us_stock_symbols
 from ..domain.models import EmaEvent, Side, LevelState
@@ -12,6 +12,9 @@ from ..infra.chart import send_with_chart
 from .zone_service import _get_obos_state
 from .zone_rules import EMA200_RULES, EMA200_INTERVAL_TO_TOPIC_ATTR
 
+if TYPE_CHECKING:
+    from .exhaustion_service import ExhaustionService
+
 logger = logging.getLogger(__name__)
 
 _EMA200_COOLDOWN = 4 * 3600
@@ -20,9 +23,10 @@ _EMA55_COOLDOWN = 4 * 3600
 
 
 class EmaService:
-    def __init__(self, state: AppState, tg: TelegramClient):
+    def __init__(self, state: AppState, tg: TelegramClient, exhaustion_svc: "ExhaustionService"):
         self.state = state
         self.tg = tg
+        self.exhaustion_svc = exhaustion_svc
 
     async def handle_event(self, event: EmaEvent) -> None:
         logger.info(f"收到EMA事件: period={event.period} {event}")
@@ -113,7 +117,7 @@ class EmaService:
             symbol=event.symbol, max_iv=event.interval, chart_title=chart_title,
         )
         for _, _, side, _ in active_matched:
-            self.state.register_tracking_window(event.symbol, side, now_ts, actual_topic, msg_id)
+            self.exhaustion_svc.on_push(event.symbol, side, now_ts, actual_topic, msg_id)
 
     # ────────────────────────────────────────────────
     # EMA55：触及 EMA55 + 1h15m 共振 active
@@ -185,4 +189,4 @@ class EmaService:
                 chat_id=settings.TG_CHAT_ID, topic_id=topic_id,
                 symbol=event.symbol, max_iv=event.interval, chart_title=chart_title,
             )
-            self.state.register_tracking_window(event.symbol, side, now_ts, topic_id, msg_id)
+            self.exhaustion_svc.on_push(event.symbol, side, now_ts, topic_id, msg_id)

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Tuple
+from typing import List, Tuple, TYPE_CHECKING
 
 from ..config import settings, get_universe, get_main_topic_symbols, get_us_stock_symbols
 from ..domain.models import ZoneEvent, TvEvent, Side, LevelState
@@ -11,6 +11,9 @@ from ..infra.utils import ts_to_utc_str
 from ..infra.chart import send_with_chart
 from collections import defaultdict
 from .zone_rules import ZONE_RULES, ZONE_INTERVAL_TO_TOPIC_ATTR, ZONE_RULE_OVERRIDES
+
+if TYPE_CHECKING:
+    from .exhaustion_service import ExhaustionService
 
 logger = logging.getLogger(__name__)
 
@@ -63,9 +66,10 @@ def _format_zone_message(event: ZoneEvent, matched: List[Tuple[str, str, Side, L
 
 
 class ZoneService:
-    def __init__(self, state: AppState, tg: TelegramClient):
+    def __init__(self, state: AppState, tg: TelegramClient, exhaustion_svc: "ExhaustionService"):
         self.state = state
         self.tg = tg
+        self.exhaustion_svc = exhaustion_svc
 
     async def handle_event(self, event: ZoneEvent) -> None:
         logger.info(f"收到Zone事件: {event}")
@@ -193,7 +197,10 @@ class ZoneService:
             )
             # 取最大 obos_iv 对应的 side 注册追踪
             max_match = max(items, key=lambda m: settings.INTERVAL_ORDER.index(m[1]))
-            self.state.register_tracking_window(event.symbol, max_match[2], now_ts, actual_topic, msg_id)
+            self.exhaustion_svc.on_push(
+                event.symbol, max_match[2], now_ts, actual_topic, msg_id,
+                zone_iv=max_match[0], obos_iv=max_match[1],
+            )
 
     async def handle_obos_reverse(self, event: TvEvent) -> None:
         """
@@ -314,4 +321,7 @@ class ZoneService:
                             chart_title=chart_title,
                             chart_ivs=chart_ivs,
                         )
-                        self.state.register_tracking_window(symbol, side, now_ts, actual_topic, msg_id)
+                        self.exhaustion_svc.on_push(
+                            symbol, side, now_ts, actual_topic, msg_id,
+                            zone_iv=zone_iv, obos_iv=obos_iv,
+                        )
