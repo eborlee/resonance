@@ -255,13 +255,28 @@ def _handle_tracking(state: AppState, now_ts: float) -> str:
         remaining_sec = int(w.push_ts + 2 * 3600 - now_ts)
         mins = remaining_sec // 60
         secs = remaining_sec % 60
-        side_label = "超买" if w.side.value == "overbought" else "超卖"
-        dot = "🔴" if w.side.value == "overbought" else "🟢"
+        side_label = "超买" if w.side == Side.OVERBOUGHT else "超卖"
+        dot = "🔴" if w.side == Side.OVERBOUGHT else "🟢"
         lines.append(
             f"  {dot} {w.symbol} {side_label}"
             f"  推送于 {ts_to_utc_str(w.push_ts)}"
             f"  剩余 {mins}m{secs:02d}s"
         )
+        # 各周期当前 ob/os 状态
+        allowed = get_universe().get(w.symbol, [])
+        level_parts = []
+        for iv in allowed:
+            rec = state.cache.get((w.symbol, iv))
+            if rec is None:
+                continue
+            is_in = rec.in_overbought if w.side == Side.OVERBOUGHT else rec.in_oversold
+            is_warm = state.is_warm(w.symbol, iv, w.side, now_ts)
+            if is_in:
+                level_parts.append(f"{iv} IN")
+            elif is_warm:
+                level_parts.append(f"{iv} WARM")
+        if level_parts:
+            lines.append(f"     {' · '.join(level_parts)}")
     return "\n".join(lines)
 
 
