@@ -125,7 +125,6 @@ class Ema21CrossEma200Rule(ExhaustionRule):
             cross_ts=cross_ts,
             message="\n".join([
                 f"{dot} {window.symbol} {side_label}",
-                ts_to_utc_str(cross_ts),
                 f"3m EMA21 {cross_dir} EMA200",
             ]),
             chart_title=f"{window.symbol}  3m【{side_label}】EMA21{cross_dir}EMA200",
@@ -215,13 +214,17 @@ class ExhaustionService:
                 return  # 首个命中即止
 
     async def _send_alert(self, window: TrackingWindow, result: ExhaustionResult) -> None:
+        msg = result.message
+        if window.reply_to_message_id:
+            chat_numeric = settings.TG_CHAT_ID.removeprefix('-100')
+            link = f"https://t.me/c/{chat_numeric}/{window.reply_to_message_id}"
+            msg = f"{msg}\n📎 {link}"
         await send_with_chart(
             tg=self.tg,
-            msg=result.message,
+            msg=msg,
             chat_id=settings.TG_CHAT_ID,
             topic_id=settings.TG_TOPIC_ENTRY,
             symbol=window.symbol,
             max_iv="3m",
             chart_title=result.chart_title,
-            reply_to_message_id=window.reply_to_message_id,
         )
