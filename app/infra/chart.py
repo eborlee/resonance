@@ -394,7 +394,7 @@ async def generate_chart(
 
     if max_iv in ("15m", "3m"):
         display_n = settings.CHART_15M_BARS if max_iv == "15m" else settings.CHART_3M_BARS
-        fetch_limit = display_n + 200
+        fetch_limit = display_n + 1000  # EMA200 需要足够稳定期，Binance 上限 1500
         label = max_iv.upper()
     else:
         candles_per_day = _CANDLES_PER_DAY.get(max_iv)

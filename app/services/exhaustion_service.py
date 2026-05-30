@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 _WINDOW_SECONDS = 2 * 3600   # 追踪窗口长度
 _POLL_INTERVAL  = 180         # 后台轮询间隔（秒）
 _3M_CANDLE_SEC  = 180         # 3m K线时长，用于将 open_time 换算为 close_time
-_KLINE_LIMIT    = 600         # EMA200初始化(200) + 稳定期(200) + 2h窗口(40) + 余量
+_KLINE_LIMIT    = 1500        # EMA200初始化(200) + 稳定期(1260) + 2h窗口(40)，Binance上限
 
 
 # ─────────────────────────────────────────────────────────────
