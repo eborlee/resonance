@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     TG_TOPIC_PRICE: int
     TG_TOPIC_MAIN: int
     TG_TOPIC_SUMMARY: int
+    TG_TOPIC_ENTRY: int
 
     # Claude API
     ANTHROPIC_API_KEY: str = ""

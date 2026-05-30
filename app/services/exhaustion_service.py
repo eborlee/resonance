@@ -219,7 +219,7 @@ class ExhaustionService:
             tg=self.tg,
             msg=result.message,
             chat_id=settings.TG_CHAT_ID,
-            topic_id=window.topic_id,
+            topic_id=settings.TG_TOPIC_ENTRY,
             symbol=window.symbol,
             max_iv="3m",
             chart_title=result.chart_title,
