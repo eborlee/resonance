@@ -91,6 +91,9 @@ class AppState:
         # ema55+1h15m 冷冻门控：key=(symbol, side) → last_pushed_ts
         self.ema55_last_pushed: Dict[Tuple[str, Side], float] = {}
 
+        # ema21+排列+ob/os 冷冻门控：key=(symbol, side) → last_pushed_ts
+        self.ema21_last_pushed: Dict[Tuple[str, Side], float] = {}
+
         # 波动预警状态：key=(symbol, interval) → expiry_ts（1.5倍K线时长）
         self.volatile_expiry: Dict[Tuple[str, str], float] = {}
 
@@ -267,6 +270,15 @@ class AppState:
 
     def record_ema55_push(self, symbol: str, side: Side, now_ts: float) -> None:
         self.ema55_last_pushed[(symbol, side)] = now_ts
+
+    def is_ema21_in_cooldown(self, symbol: str, side: Side, now_ts: float, cooldown_seconds: float) -> bool:
+        last_ts = self.ema21_last_pushed.get((symbol, side))
+        if last_ts is None:
+            return False
+        return (now_ts - last_ts) < cooldown_seconds
+
+    def record_ema21_push(self, symbol: str, side: Side, now_ts: float) -> None:
+        self.ema21_last_pushed[(symbol, side)] = now_ts
 
     def update_volatile(self, symbol: str, interval: str, now_ts: float) -> None:
         candle_sec = self.interval_seconds.get(interval, 3600)

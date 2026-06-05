@@ -253,6 +253,9 @@ def parse_ema_payload(payload: Dict[str, Any]) -> Optional[EmaEvent]:
     raw_ts = payload.get("ts")
     ts = float(raw_ts) / 1000 if raw_ts is not None else time.time()
 
+    raw_alignment = str(payload.get("alignment", "")).strip().lower()
+    alignment = raw_alignment if raw_alignment in ("bullish", "bearish") else None
+
     return EmaEvent(
         symbol=symbol,
         interval=interval,
@@ -261,6 +264,7 @@ def parse_ema_payload(payload: Dict[str, Any]) -> Optional[EmaEvent]:
         role=role,
         close=close,
         ts=ts,
+        alignment=alignment,
     )
 
 

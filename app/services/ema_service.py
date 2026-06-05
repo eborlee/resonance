@@ -20,6 +20,11 @@ logger = logging.getLogger(__name__)
 _EMA200_COOLDOWN = 4 * 3600
 _EMA55_COMBO = ("1h", "15m")
 _EMA55_COOLDOWN = 4 * 3600
+_EMA21_COOLDOWN = 4 * 3600
+_EMA21_INTERVAL_TO_TOPIC_ATTR: dict[str, str] = {
+    "4h": "TG_TOPIC_4H",
+    "1h": "TG_TOPIC_1H",
+}
 
 
 class EmaService:
@@ -34,6 +39,8 @@ class EmaService:
             await self._handle_ema200(event)
         elif event.period == 55:
             await self._handle_ema55(event)
+        elif event.period == 21:
+            await self._handle_ema21(event)
         else:
             logger.warning(f"[EMA] 暂不支持的period={event.period}，跳过")
 
@@ -190,3 +197,71 @@ class EmaService:
                 symbol=event.symbol, max_iv=event.interval, chart_title=chart_title,
             )
             self.exhaustion_svc.on_push(event.symbol, side, now_ts, topic_id, msg_id)
+
+    # ────────────────────────────────────────────────
+    # EMA21：触及 EMA21 + 均线排列 + 同级别 ob/os IN
+    # 支持周期：4h / 1h
+    # ────────────────────────────────────────────────
+
+    async def _handle_ema21(self, event: EmaEvent) -> None:
+        topic_attr = _EMA21_INTERVAL_TO_TOPIC_ATTR.get(event.interval)
+        if topic_attr is None:
+            logger.info(f"[EMA21] 非目标周期({event.interval})，跳过")
+            return
+
+        if not event.alignment:
+            logger.info(f"[EMA21] payload 无 alignment 字段，跳过")
+            return
+
+        allowed_intervals = get_universe().get(event.symbol)
+        if not allowed_intervals or event.interval not in allowed_intervals:
+            logger.info(f"[EMA21] {event.symbol} {event.interval} 不在 universe，跳过")
+            return
+
+        now_ts = event.ts
+        # alignment 决定检查哪个方向：bearish → 超买（价格在均线上方遇阻）；bullish → 超卖
+        side_map = {"bearish": Side.OVERBOUGHT, "bullish": Side.OVERSOLD}
+        side = side_map[event.alignment]
+
+        obos_state = _get_obos_state(self.state, event.symbol, event.interval, side, now_ts)
+        logger.info(f"[EMA21] {event.symbol} {event.interval} alignment={event.alignment} side={side.value} state={obos_state.value}")
+
+        if obos_state != LevelState.IN:
+            logger.info(f"[EMA21] {event.symbol} {event.interval} ob/os 不在 IN，跳过")
+            return
+
+        if self.state.is_ema21_in_cooldown(event.symbol, side, now_ts, _EMA21_COOLDOWN):
+            logger.info(f"[EMA21冷冻] {event.symbol} {event.interval} {side.value} 在冷冻期内，跳过")
+            return
+
+        is_main = event.symbol in get_main_topic_symbols()
+        is_us = event.symbol in get_us_stock_symbols()
+        topic_id = getattr(settings, topic_attr)
+        actual_topic = (
+            settings.TG_TOPIC_MAIN if is_main else
+            settings.TG_TOPIC_US if is_us else
+            topic_id
+        )
+
+        side_label = "超卖" if side == Side.OVERSOLD else "超买"
+        dot = "🟢" if side == Side.OVERSOLD else "🔴"
+        align_label = "多头排列" if event.alignment == "bullish" else "反向排列"
+        role_label = "支撑" if event.role == "S" else "阻力"
+
+        msg = "\n".join([
+            f"〽️ {event.symbol} EMA21 触及",
+            ts_to_utc_str(event.ts),
+            f"EMA21: {event.ema_value} ({role_label}) | {event.interval}",
+            f"均线: {align_label}",
+            f"{dot} {event.interval} {side_label} IN",
+        ])
+        chart_title = f"{event.symbol}  {event.interval}【EMA21触及】{side_label} {align_label}"
+
+        self.state.record_ema21_push(event.symbol, side, now_ts)
+        logger.warning(f"[EMA21推送] {event.symbol} {event.interval} {side.value} {event.alignment}")
+        msg_id = await send_with_chart(
+            tg=self.tg, msg=msg,
+            chat_id=settings.TG_CHAT_ID, topic_id=actual_topic,
+            symbol=event.symbol, max_iv=event.interval, chart_title=chart_title,
+        )
+        self.exhaustion_svc.on_push(event.symbol, side, now_ts, actual_topic, msg_id)

@@ -73,6 +73,7 @@ class EmaEvent:
     role: str        # "R"=阻力 / "S"=支撑
     close: float
     ts: float
+    alignment: Optional[str] = None  # "bullish" / "bearish"，仅 EMA21 携带
 
 
 @dataclass(frozen=True)
