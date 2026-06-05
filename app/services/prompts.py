@@ -1,28 +1,28 @@
-MARKET_BRIEFING_SYSTEM = """你是一位专业的美股市场分析师，每天美东时间早上8点为交易者准备开盘前简报。
+MARKET_BRIEFING_SYSTEM = """你是一位专业的美股市场分析师，根据当前时段为交易者准备市场简报。
 简报务必简洁实用，读完不超过3分钟。语言：中文。不使用 Markdown 标题符号（无#、无**），只保留模块标题中括号。"""
 
-MARKET_BRIEFING_PROMPT_TEMPLATE = """今天是 {date}（美东时间）。
+MARKET_BRIEFING_PROMPT_TEMPLATE = """今天是 {date}（美东时间）。当前时段：{briefing_type}。
 
-以下是从数据源取到的最近交易日收盘数据，供参考：
+{briefing_context}
+
+以下是从数据源取到的最近交易日数据，供参考：
 
 {market_data}
 
 请先用网络搜索查找：
-1. 昨日美股主要新闻、重要个股异动原因
+1. {search_focus}
 2. 今日（{date}）是否有 Fed 发言 / FOMC / CPI / PCE / 非农 / 重大财报等风险事件
 3. 当前市场热点叙事和板块资金动向
 
-然后按以下 6 个模块格式生成开盘前简报，每模块标题保留（含中括号），内容 2-5 行：
+然后按以下 6 个模块格式生成{briefing_type}简报，每模块标题保留（含中括号），内容 2-5 行：
 
 【今日风险提示】
-- 今日重大宏观事件（Fed / FOMC / CPI / 非农等）有无，若有请注明时间
+- 重大宏观事件（Fed / FOMC / CPI / 非农等）有无，若有请注明时间
 - 重要财报（大市值票）
 - 地缘政治 / 监管面新动向
 
-【隔夜市场回顾】
-- 道琼斯 / 纳斯达克 / 标普 500 昨日收盘涨跌幅
-- 美股期货当前点位及方向（用数据中的期货数据）
-- 美债 / 美元指数动向（如有重要变化）
+【{market_review_label}】
+{market_review_guide}
 
 【市场情绪】
 - VIX 点位及变化（恐慌 / 平静 / 过度乐观）
@@ -30,7 +30,7 @@ MARKET_BRIEFING_PROMPT_TEMPLATE = """今天是 {date}（美东时间）。
 - 一句话情绪简评
 
 【核心股票动态】
-列出以下个股昨日涨跌（从数据直接取），重点标注涨跌幅超 3% 或有新闻驱动的：
+列出以下个股涨跌（从数据直接取），重点标注涨跌幅超 3% 或有新闻驱动的：
 风向标：NVDA / AAPL / TSLA / META / MSFT / GOOGL / AMD
 {custom_watchlist_section}
 

@@ -78,14 +78,15 @@ class ClaudeClient:
 
         return response.content[0].text, result_usage
 
-    async def generate_market_briefing(self, prompt: str) -> tuple[str, AnalysisUsage]:
+    async def generate_market_briefing(self, prompt: str, model: str | None = None) -> tuple[str, AnalysisUsage]:
         """调用 Claude 生成市场简报，启用 web_search 工具；失败时降级为无搜索推理。"""
         messages: list = [{"role": "user", "content": prompt}]
         total = AnalysisUsage(0, 0, 0, 0)
 
+        _model = model or self._model
         async def _create(use_search: bool):
             kwargs: dict = {
-                "model": self._model,
+                "model": _model,
                 "max_tokens": 2048,
                 "system": MARKET_BRIEFING_SYSTEM,
                 "messages": messages,

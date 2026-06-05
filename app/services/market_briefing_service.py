@@ -124,7 +124,40 @@ class MarketBriefingService:
             logger.warning("市场数据获取异常，继续生成简报", exc_info=True)
             market_data = "（数据获取失败，请以搜索结果为准）"
 
-        date_str = datetime.datetime.now(EASTERN).strftime("%Y-%m-%d %A")
+        now_et = datetime.datetime.now(EASTERN)
+        date_str = now_et.strftime("%Y-%m-%d %A")
+        hour, minute = now_et.hour, now_et.minute
+
+        if hour < 9 or (hour == 9 and minute < 30):
+            briefing_type = "开盘前"
+            briefing_context = "当前为美股开盘前，请重点分析昨日收盘行情与今日开盘风险。"
+            search_focus = "昨日美股主要新闻、重要个股异动原因"
+            market_review_label = "隔夜市场回顾"
+            market_review_guide = (
+                "- 道琼斯 / 纳斯达克 / 标普 500 昨日收盘涨跌幅\n"
+                "- 美股期货当前点位及方向（用数据中的期货数据）\n"
+                "- 美债 / 美元指数动向（如有重要变化）"
+            )
+        elif hour < 16:
+            briefing_type = "盘中"
+            briefing_context = "当前为美股交易时段，请整合今日盘中实时行情动态。"
+            search_focus = "今日美股盘中主要新闻、个股异动原因"
+            market_review_label = "今日盘中回顾"
+            market_review_guide = (
+                "- 道琼斯 / 纳斯达克 / 标普 500 今日盘中涨跌幅\n"
+                "- 盘中主要异动及原因\n"
+                "- 美债 / 美元指数动向（如有重要变化）"
+            )
+        else:
+            briefing_type = "盘后"
+            briefing_context = "当前为美股收盘后，请整合今日全天行情（含今日收盘数据）及盘后异动，同时展望明日风险点。"
+            search_focus = "今日美股收盘行情、重要个股盘后异动原因"
+            market_review_label = "今日行情回顾"
+            market_review_guide = (
+                "- 道琼斯 / 纳斯达克 / 标普 500 今日收盘涨跌幅\n"
+                "- 今日主要个股盘后异动\n"
+                "- 美债 / 美元指数动向（如有重要变化）"
+            )
 
         custom_section = (
             f"自选股：{' / '.join(custom)}"
@@ -134,12 +167,17 @@ class MarketBriefingService:
 
         prompt = MARKET_BRIEFING_PROMPT_TEMPLATE.format(
             date=date_str,
+            briefing_type=briefing_type,
+            briefing_context=briefing_context,
+            search_focus=search_focus,
+            market_review_label=market_review_label,
+            market_review_guide=market_review_guide,
             market_data=market_data,
             custom_watchlist_section=custom_section,
         )
 
         try:
-            text, usage = await self._claude.generate_market_briefing(prompt)
+            text, usage = await self._claude.generate_market_briefing(prompt, model=settings.BRIEFING_MODEL)
         except Exception:
             logger.error("Claude 生成简报失败", exc_info=True)
             return
@@ -156,11 +194,12 @@ class MarketBriefingService:
             return
 
         # token 用量推送到 summary topic
+        # Haiku 4.5 定价：输入 $0.80/M，输出 $4.00/M，缓存写 $1.00/M，缓存读 $0.08/M
         cost = (
-            usage.input_tokens * 3.00
-            + usage.output_tokens * 15.00
-            + usage.cache_creation_tokens * 3.75
-            + usage.cache_read_tokens * 0.30
+            usage.input_tokens * 0.80
+            + usage.output_tokens * 4.00
+            + usage.cache_creation_tokens * 1.00
+            + usage.cache_read_tokens * 0.08
         ) / 1_000_000
         summary_lines = [
             f"📰 市场简报 Token 用量（{date_str}）",

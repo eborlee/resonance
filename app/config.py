@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     CLAUDE_MODEL: str = "claude-sonnet-4-6"
     CLAUDE_MAX_TOKENS: int = 1024
+    BRIEFING_MODEL: str = "claude-haiku-4-5-20251001"  # 市场简报用，独立于图表分析模型
 
     def topic_name_map(self) -> Dict[int | None, str]:
         mapping: Dict[int | None, str] = {None: "Direct"}
