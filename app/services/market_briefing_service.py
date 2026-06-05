@@ -6,9 +6,6 @@ import logging
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
-import pandas as pd
-import yfinance as yf
-
 from ..config import settings
 from ..services.prompts import MARKET_BRIEFING_PROMPT_TEMPLATE
 
@@ -31,80 +28,12 @@ def set_briefing_enabled(value: bool) -> None:
 def is_briefing_enabled() -> bool:
     return _briefing_enabled
 
-# ── 固定监控标的 ──────────────────────────────────────────────────────────────
-_INDICES = ["SPY", "QQQ", "^DJI", "^GSPC", "^IXIC"]
-_FUTURES = ["ES=F", "NQ=F"]
-_SENTIMENT = ["^VIX"]
-_SECTOR_ETFS = ["XLK", "XLF", "XLE", "XLV", "XLI", "ARKK"]
-_CORE_STOCKS = ["NVDA", "AAPL", "TSLA", "META", "MSFT", "GOOGL", "AMD"]
-
-# ── 自选股：可直接在这里修改，也可通过 .env BRIEFING_CUSTOM_WATCHLIST=PLTR,COIN 覆盖
-_DEFAULT_CUSTOM: list[str] = []
-
 
 def _get_custom_watchlist() -> list[str]:
     raw = settings.BRIEFING_CUSTOM_WATCHLIST.strip()
     if not raw:
-        return _DEFAULT_CUSTOM
+        return []
     return [s.strip().upper() for s in raw.split(",") if s.strip()]
-
-
-def _fetch_market_data(extra_symbols: list[str]) -> str:
-    """用 yfinance 批量拉取收盘价和涨跌幅，返回格式化字符串。"""
-    all_syms = list(dict.fromkeys(
-        _INDICES + _FUTURES + _SENTIMENT + _SECTOR_ETFS + _CORE_STOCKS + extra_symbols
-    ))
-
-    try:
-        raw = yf.download(
-            tickers=all_syms,
-            period="5d",
-            interval="1d",
-            auto_adjust=True,
-            progress=False,
-            threads=True,
-        )
-    except Exception as e:
-        logger.warning("yfinance 批量下载失败: %s", e)
-        return "（市场数据获取失败）"
-
-    # 兼容单/多 ticker 返回结构
-    if isinstance(raw.columns, pd.MultiIndex):
-        closes = raw["Close"]
-    else:
-        closes = raw[["Close"]].rename(columns={"Close": all_syms[0]})
-
-    def fmt_group(label: str, symbols: list[str]) -> list[str]:
-        lines = [f"\n[{label}]"]
-        for sym in symbols:
-            if sym not in closes.columns:
-                lines.append(f"  {sym}: 数据不可用")
-                continue
-            col = closes[sym].dropna()
-            if col.empty:
-                lines.append(f"  {sym}: 数据不可用")
-                continue
-            price = float(col.iloc[-1])
-            if len(col) >= 2:
-                prev = float(col.iloc[-2])
-                pct = (price - prev) / prev * 100
-                lines.append(f"  {sym}: {price:.2f} ({pct:+.2f}%)")
-            else:
-                lines.append(f"  {sym}: {price:.2f}")
-        return lines
-
-    # 明确标注数据截止日期，让模型知道数据对应哪一天
-    latest_date = closes.index[-1].strftime("%Y-%m-%d") if not closes.empty else "未知"
-    rows: list[str] = [f"【数据截止日期：{latest_date}，涨跌幅为该日相对前一交易日的变化】"]
-    rows += fmt_group("大盘指数 ETF", _INDICES)
-    rows += fmt_group("期货", _FUTURES)
-    rows += fmt_group("情绪 (VIX)", _SENTIMENT)
-    rows += fmt_group("板块 ETF", _SECTOR_ETFS)
-    rows += fmt_group("核心股票", _CORE_STOCKS)
-    if extra_symbols:
-        rows += fmt_group("自选股", extra_symbols)
-
-    return "\n".join(rows)
 
 
 class MarketBriefingService:
@@ -119,28 +48,19 @@ class MarketBriefingService:
         logger.info("开始生成市场简报")
         custom = _get_custom_watchlist()
 
-        try:
-            loop = asyncio.get_running_loop()
-            market_data = await loop.run_in_executor(None, _fetch_market_data, custom)
-        except Exception:
-            logger.warning("市场数据获取异常，继续生成简报", exc_info=True)
-            market_data = "（数据获取失败，请以搜索结果为准）"
-
         now_et = datetime.datetime.now(EASTERN)
         date_str = now_et.strftime("%Y-%m-%d %A")
         hour, minute = now_et.hour, now_et.minute
 
         if hour < 4:
-            # 盘后跨午夜（0-4点）：日期已翻，但回顾的是前一个交易日
             prev_day = (now_et - datetime.timedelta(days=1)).strftime("%Y-%m-%d %A")
             briefing_type = "盘后"
             briefing_context = (
                 f"当前已过午夜，需要回顾的交易日为 {prev_day}（非今日 {date_str[:10]}）。"
-                f"请整合 {prev_day[:10]} 全天行情及盘后异动，同时展望 {date_str[:10]} 的风险点。"
-                f"注意：下方数据截止日期可能早于 {prev_day[:10]}，若如此请以网络搜索结果为准获取 {prev_day[:10]} 的实际涨跌幅，"
-                f"不得将数据中早于 {prev_day[:10]} 的涨跌幅当作 {prev_day[:10]} 的数据报告。"
+                f"请通过网络搜索获取 {prev_day[:10]} 的三大指数涨跌幅、核心个股表现及盘后异动，"
+                f"同时展望 {date_str[:10]} 的风险点。"
             )
-            search_focus = f"{prev_day[:10]} 美股收盘行情、重要个股盘后异动原因"
+            search_focus = f"{prev_day[:10]} 美股收盘行情、三大指数涨跌幅、重要个股盘后异动原因"
             market_review_label = f"{prev_day[:10]} 行情回顾"
             market_review_guide = (
                 "- 道琼斯 / 纳斯达克 / 标普 500 当日收盘涨跌幅\n"
@@ -150,11 +70,11 @@ class MarketBriefingService:
         elif hour < 9 or (hour == 9 and minute < 30):
             briefing_type = "开盘前"
             briefing_context = "当前为美股开盘前（04:00-09:30），请重点分析昨日收盘行情与今日开盘风险。"
-            search_focus = "昨日美股主要新闻、重要个股异动原因"
+            search_focus = "昨日美股主要新闻、重要个股异动原因、今日开盘前期货走势"
             market_review_label = "隔夜市场回顾"
             market_review_guide = (
                 "- 道琼斯 / 纳斯达克 / 标普 500 昨日收盘涨跌幅\n"
-                "- 美股期货当前点位及方向（用数据中的期货数据）\n"
+                "- 美股期货当前点位及方向\n"
                 "- 美债 / 美元指数动向（如有重要变化）"
             )
         elif hour < 16:
@@ -169,8 +89,8 @@ class MarketBriefingService:
             )
         else:
             briefing_type = "盘后"
-            briefing_context = "当前为美股收盘后，请整合今日全天行情（含今日收盘数据）及盘后异动，同时展望明日风险点。"
-            search_focus = "今日美股收盘行情、重要个股盘后异动原因"
+            briefing_context = "当前为美股收盘后，请整合今日全天行情及盘后异动，同时展望明日风险点。"
+            search_focus = "今日美股收盘行情、三大指数涨跌幅、重要个股盘后异动原因"
             market_review_label = "今日行情回顾"
             market_review_guide = (
                 "- 道琼斯 / 纳斯达克 / 标普 500 今日收盘涨跌幅\n"
@@ -191,7 +111,6 @@ class MarketBriefingService:
             search_focus=search_focus,
             market_review_label=market_review_label,
             market_review_guide=market_review_guide,
-            market_data=market_data,
             custom_watchlist_section=custom_section,
         )
 
@@ -212,7 +131,6 @@ class MarketBriefingService:
             logger.error("市场简报 TG 发送失败", exc_info=True)
             return
 
-        # token 用量推送到 summary topic
         # Haiku 4.5 定价：输入 $0.80/M，输出 $4.00/M，缓存写 $1.00/M，缓存读 $0.08/M
         cost = (
             usage.input_tokens * 0.80

@@ -6,10 +6,6 @@ MARKET_BRIEFING_PROMPT_TEMPLATE = """今天是 {date}（美东时间）。当前
 
 {briefing_context}
 
-以下是从数据源取到的最近交易日数据，供参考：
-
-{market_data}
-
 请先用网络搜索查找：
 1. {search_focus}（重点：财报具体数字、合作协议金额、政策文件名、发言人原话等可引用的具体信息）
 2. 今日（{date}）是否有 Fed 发言 / FOMC / CPI / PCE / 非农 / 重大财报等风险事件
