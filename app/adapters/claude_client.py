@@ -87,7 +87,7 @@ class ClaudeClient:
         async def _create(use_search: bool):
             kwargs: dict = {
                 "model": _model,
-                "max_tokens": 2048,
+                "max_tokens": 4096,
                 "system": MARKET_BRIEFING_SYSTEM,
                 "messages": messages,
             }

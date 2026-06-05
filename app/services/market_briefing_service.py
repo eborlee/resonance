@@ -93,7 +93,9 @@ def _fetch_market_data(extra_symbols: list[str]) -> str:
                 lines.append(f"  {sym}: {price:.2f}")
         return lines
 
-    rows: list[str] = []
+    # 明确标注数据截止日期，让模型知道数据对应哪一天
+    latest_date = closes.index[-1].strftime("%Y-%m-%d") if not closes.empty else "未知"
+    rows: list[str] = [f"【数据截止日期：{latest_date}，涨跌幅为该日相对前一交易日的变化】"]
     rows += fmt_group("大盘指数 ETF", _INDICES)
     rows += fmt_group("期货", _FUTURES)
     rows += fmt_group("情绪 (VIX)", _SENTIMENT)
@@ -135,6 +137,8 @@ class MarketBriefingService:
             briefing_context = (
                 f"当前已过午夜，需要回顾的交易日为 {prev_day}（非今日 {date_str[:10]}）。"
                 f"请整合 {prev_day[:10]} 全天行情及盘后异动，同时展望 {date_str[:10]} 的风险点。"
+                f"注意：下方数据截止日期可能早于 {prev_day[:10]}，若如此请以网络搜索结果为准获取 {prev_day[:10]} 的实际涨跌幅，"
+                f"不得将数据中早于 {prev_day[:10]} 的涨跌幅当作 {prev_day[:10]} 的数据报告。"
             )
             search_focus = f"{prev_day[:10]} 美股收盘行情、重要个股盘后异动原因"
             market_review_label = f"{prev_day[:10]} 行情回顾"
