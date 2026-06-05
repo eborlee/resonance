@@ -128,9 +128,24 @@ class MarketBriefingService:
         date_str = now_et.strftime("%Y-%m-%d %A")
         hour, minute = now_et.hour, now_et.minute
 
-        if hour < 9 or (hour == 9 and minute < 30):
+        if hour < 4:
+            # 盘后跨午夜（0-4点）：日期已翻，但回顾的是前一个交易日
+            prev_day = (now_et - datetime.timedelta(days=1)).strftime("%Y-%m-%d %A")
+            briefing_type = "盘后"
+            briefing_context = (
+                f"当前已过午夜，需要回顾的交易日为 {prev_day}（非今日 {date_str[:10]}）。"
+                f"请整合 {prev_day[:10]} 全天行情及盘后异动，同时展望 {date_str[:10]} 的风险点。"
+            )
+            search_focus = f"{prev_day[:10]} 美股收盘行情、重要个股盘后异动原因"
+            market_review_label = f"{prev_day[:10]} 行情回顾"
+            market_review_guide = (
+                "- 道琼斯 / 纳斯达克 / 标普 500 当日收盘涨跌幅\n"
+                "- 主要个股盘后异动\n"
+                "- 美债 / 美元指数动向（如有重要变化）"
+            )
+        elif hour < 9 or (hour == 9 and minute < 30):
             briefing_type = "开盘前"
-            briefing_context = "当前为美股开盘前，请重点分析昨日收盘行情与今日开盘风险。"
+            briefing_context = "当前为美股开盘前（04:00-09:30），请重点分析昨日收盘行情与今日开盘风险。"
             search_focus = "昨日美股主要新闻、重要个股异动原因"
             market_review_label = "隔夜市场回顾"
             market_review_guide = (
