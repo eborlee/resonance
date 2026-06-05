@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     TG_TOPIC_MAIN: int
     TG_TOPIC_SUMMARY: int
     TG_TOPIC_ENTRY: int
+    TG_TOPIC_BRIEF: int = 17529  # 市场简报 topic
 
     # Claude API
     ANTHROPIC_API_KEY: str = ""
@@ -38,6 +39,9 @@ class Settings(BaseSettings):
             if name.startswith("TG_TOPIC_"):
                 mapping[value] = name.removeprefix("TG_TOPIC_").title()
         return mapping
+
+    # 市场简报自选股（逗号分隔，可在 .env 中覆盖）
+    BRIEFING_CUSTOM_WATCHLIST: str = ""
 
     # Thresholds
     OB_LEVEL: float = 40.0

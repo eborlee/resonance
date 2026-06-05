@@ -21,6 +21,7 @@ from .services.divergence_service import DivergenceService
 from .services.volatile_service import VolatileService
 from .services.tg_command_handler import polling_loop
 from .services.exhaustion_service import ExhaustionService, Ema21CrossEma200Rule
+from .services.market_briefing_service import MarketBriefingService
 import logging
 from .infra.logger_config import setup_logging
 
@@ -56,7 +57,12 @@ state = AppState(
 # 消息统计
 msg_stats = MessageStats()
 
-# Claude 图表分析（ANTHROPIC_API_KEY 未配置时跳过）
+# Telegram client
+tg = TelegramClient(bot_token=settings.TG_BOT_TOKEN, stats=msg_stats)
+
+# Claude 图表分析 + 市场简报（ANTHROPIC_API_KEY 未配置时跳过）
+_briefing_svc: MarketBriefingService | None = None
+
 if settings.ANTHROPIC_API_KEY:
     _claude_client = ClaudeClient(
         api_key=settings.ANTHROPIC_API_KEY,
@@ -65,11 +71,9 @@ if settings.ANTHROPIC_API_KEY:
     )
     register_analysis(ChartAnalysisService(_claude_client))
     register_stats(msg_stats)
+    _briefing_svc = MarketBriefingService(claude=_claude_client, tg=tg)
 else:
-    logger.warning("ANTHROPIC_API_KEY 未配置，图表分析功能已禁用")
-
-# Telegram client + 主服务
-tg = TelegramClient(bot_token=settings.TG_BOT_TOKEN, stats=msg_stats)
+    logger.warning("ANTHROPIC_API_KEY 未配置，图表分析和市场简报功能已禁用")
 
 exhaustion_svc = ExhaustionService(state=state, tg=tg)
 exhaustion_svc.register_rule(Ema21CrossEma200Rule())
@@ -138,15 +142,24 @@ async def daily_summary_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     task = asyncio.create_task(
-        polling_loop(state=state, tg=tg, owner_chat_id=settings.TG_OWNER_CHAT_ID, stats=msg_stats)
+        polling_loop(state=state, tg=tg, owner_chat_id=settings.TG_OWNER_CHAT_ID, stats=msg_stats, briefing_svc=_briefing_svc)
     )
     summary_task = asyncio.create_task(daily_summary_loop())
     exhaustion_task = asyncio.create_task(exhaustion_svc.run_forever())
+    briefing_task = (
+        asyncio.create_task(_briefing_svc.run_daily_loop())
+        if _briefing_svc is not None
+        else None
+    )
     yield
     task.cancel()
     summary_task.cancel()
     exhaustion_task.cancel()
-    for t in (task, summary_task, exhaustion_task):
+    if briefing_task is not None:
+        briefing_task.cancel()
+    for t in (task, summary_task, exhaustion_task, briefing_task):
+        if t is None:
+            continue
         try:
             await t
         except asyncio.CancelledError:

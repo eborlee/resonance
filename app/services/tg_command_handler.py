@@ -12,6 +12,7 @@ from ..domain.models import Side, LevelState
 from ..infra.store import AppState
 from ..infra.stats import MessageStats
 from ..infra.chart import set_analysis_enabled, is_analysis_enabled
+from ..services.market_briefing_service import set_briefing_enabled, is_briefing_enabled, MarketBriefingService
 from ..adapters.tg_client import TelegramClient
 from ..infra.utils import ts_to_utc_str
 
@@ -27,7 +28,8 @@ COMMANDS = """/cache <symbol>      — 各周期 IN/WARM/OUT 状态
 /remove <symbol>     — 从 universe 移除品种
 /universe            — 所有监控品种
 /stats               — 今日推送次数统计
-/analysis on|off     — 开启/关闭4h图表AI分析"""
+/analysis on|off     — 开启/关闭4h图表AI分析
+/briefing on|off|now — 开启/关闭/立即推送市场简报"""
 
 
 def _handle_cache(state: AppState, symbol: str, now_ts: float) -> str:
@@ -298,7 +300,7 @@ def _parse_command(text: str):
     return cmd, arg
 
 
-async def _process_update(update: dict, state: AppState, tg: TelegramClient, owner_chat_id: str, stats: MessageStats | None = None) -> None:
+async def _process_update(update: dict, state: AppState, tg: TelegramClient, owner_chat_id: str, stats: MessageStats | None = None, briefing_svc: MarketBriefingService | None = None) -> None:
     msg = update.get("message")
     if not msg:
         return
@@ -381,6 +383,23 @@ async def _process_update(update: dict, state: AppState, tg: TelegramClient, own
             status = "开启" if is_analysis_enabled() else "关闭"
             reply = f"当前状态：{status}\n用法：/analysis on 或 /analysis off"
 
+    elif cmd == "/briefing":
+        if arg == "ON":
+            set_briefing_enabled(True)
+            reply = "✅ 每日市场简报已开启（美东时间 08:00 推送）"
+        elif arg == "OFF":
+            set_briefing_enabled(False)
+            reply = "⏹️ 每日市场简报已关闭"
+        elif arg == "NOW":
+            if briefing_svc is None:
+                reply = "❌ 简报服务未启用（ANTHROPIC_API_KEY 未配置）"
+            else:
+                asyncio.create_task(briefing_svc.generate_and_send(force=True))
+                reply = "⏳ 已触发，简报生成中（完成后推送到简报 topic，约需1-2分钟）"
+        else:
+            status = "开启" if is_briefing_enabled() else "关闭"
+            reply = f"当前状态：{status}\n用法：/briefing on｜off｜now"
+
     elif cmd == "/help":
         reply = COMMANDS
 
@@ -405,11 +424,12 @@ COMMAND_MENU = [
     {"command": "universe", "description": "列出所有监控品种"},
     {"command": "stats",    "description": "今日推送次数统计"},
     {"command": "analysis", "description": "开启/关闭4h图表AI分析，如 /analysis on"},
+    {"command": "briefing", "description": "开启/关闭每日市场简报（美东8点），如 /briefing on"},
     {"command": "help",     "description": "查看命令列表"},
 ]
 
 
-async def polling_loop(state: AppState, tg: TelegramClient, owner_chat_id: str, stats: MessageStats | None = None) -> None:
+async def polling_loop(state: AppState, tg: TelegramClient, owner_chat_id: str, stats: MessageStats | None = None, briefing_svc: MarketBriefingService | None = None) -> None:
     """后台 long-polling 循环，与 FastAPI 共用 asyncio 事件循环。"""
     logger.info("TG command polling 启动")
 
@@ -427,7 +447,7 @@ async def polling_loop(state: AppState, tg: TelegramClient, owner_chat_id: str, 
             updates = await tg.get_updates(offset=offset, timeout=20)
             for update in updates:
                 offset = update["update_id"] + 1
-                await _process_update(update, state, tg, owner_chat_id, stats)
+                await _process_update(update, state, tg, owner_chat_id, stats, briefing_svc)
         except asyncio.CancelledError:
             logger.info("TG command polling 停止")
             return
