@@ -6,7 +6,11 @@ MARKET_BRIEFING_PROMPT_TEMPLATE = """今天是 {date}（美东时间）。当前
 
 {briefing_context}
 
-请先用网络搜索查找：
+以下是从 yfinance 获取的量化行情数据（{data_date} 收盘），数据来源可靠，涨跌幅请以此为准，不得用网络搜索结果覆盖：
+
+{market_data}
+
+请用网络搜索补充以下定性信息（不要用搜索结果替换上方价格数据）：
 1. {search_focus}（重点：财报具体数字、合作协议金额、政策文件名、发言人原话等可引用的具体信息）
 2. 今日（{date}）是否有 Fed 发言 / FOMC / CPI / PCE / 非农 / 重大财报等风险事件
 3. 当前市场热点叙事和板块资金动向
