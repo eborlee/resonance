@@ -312,10 +312,12 @@ def _draw_chart(
     ax = axes[0]
 
     # 直接将 CJK 字体注入 suptitle Text 对象，绕过名称查找回落问题
+    title_color = "#ef5350" if "超买" in title_str else "#26a69a" if "超卖" in title_str else "#000000"
     if _cjk_font_prop is not None:
         for txt in fig.texts:
             txt.set_fontproperties(_cjk_font_prop)
             txt.set_fontsize(21)
+            txt.set_color(title_color)
 
     # 图例（mplfinance returnfig 模式下需手动触发）
     handles, labels = [], []
