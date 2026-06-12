@@ -492,7 +492,7 @@ def _chart_intervals_for(max_iv: str) -> list[str]:
     """根据信号最大周期决定要发送的3张图的周期组合。"""
     if max_iv == "1D":
         return ["1D", "4h", "1h"]
-    if max_iv in ("15m", "3m"):
+    if max_iv in ("1h", "15m", "3m"):
         return ["1h", "15m", "3m"]
     return ["4h", "1h", "15m"]
 
