@@ -7,7 +7,6 @@ from ..config import settings, get_universe, get_main_topic_symbols, get_us_stoc
 from ..domain.models import VolatileEvent, Side, LevelState
 from ..infra.store import AppState
 from ..adapters.tg_client import TelegramClient
-from ..infra.utils import ts_to_utc_str
 from ..infra.chart import send_with_chart
 from .zone_service import _get_obos_state
 
@@ -98,7 +97,6 @@ class VolatileService:
 
             msg = "\n".join([
                 f"📶 {event.symbol} 波动预警",
-                ts_to_utc_str(now_ts),
                 f"区间: {event.interval}",
                 "配合:",
                 *obos_lines,

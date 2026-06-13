@@ -7,7 +7,6 @@ from ..config import settings, get_universe, get_main_topic_symbols, get_us_stoc
 from ..domain.models import EmaEvent, Side, LevelState
 from ..infra.store import AppState
 from ..adapters.tg_client import TelegramClient
-from ..infra.utils import ts_to_utc_str
 from ..infra.chart import send_with_chart
 from .zone_service import _get_obos_state
 from .zone_rules import EMA200_RULES, EMA200_INTERVAL_TO_TOPIC_ATTR
@@ -103,7 +102,6 @@ class EmaService:
         )
         msg_lines = [
             f"〽️ {event.symbol} EMA200 触及",
-            ts_to_utc_str(event.ts),
             f"EMA200: {event.ema_value} ({event.role}) | {event.interval}",
             "配合:",
         ]
@@ -184,7 +182,6 @@ class EmaService:
             role_label = "支撑" if event.role == "S" else "阻力"
             msg = "\n".join([
                 f"〽️ {event.symbol} EMA55 触及",
-                ts_to_utc_str(event.ts),
                 f"EMA55: {event.ema_value} ({role_label}) | {event.interval}",
                 f"配合: 1h+15m 共振",
                 f"{dot} {side_label} IN",
@@ -222,16 +219,21 @@ class EmaService:
         # alignment 决定检查哪个方向：bearish → 超买（价格在均线上方遇阻）；bullish → 超卖
         side_map = {"bearish": Side.OVERBOUGHT, "bullish": Side.OVERSOLD}
         side = side_map[event.alignment]
+        in_cooldown = self.state.is_ema21_in_cooldown(event.symbol, side, now_ts, _EMA21_COOLDOWN)
 
         obos_state = _get_obos_state(self.state, event.symbol, event.interval, side, now_ts)
         logger.info(f"[EMA21] {event.symbol} {event.interval} alignment={event.alignment} side={side.value} state={obos_state.value}")
+        push_main = obos_state == LevelState.IN and not in_cooldown
 
-        if obos_state != LevelState.IN:
-            logger.info(f"[EMA21] {event.symbol} {event.interval} ob/os 不在 IN，跳过")
-            return
+        # 15m 推送：仅限 1h 周期，15m obos IN 即可，不要求 1h obos IN
+        push_15m = False
+        if event.interval == "1h" and "15m" in allowed_intervals:
+            obos_15m = _get_obos_state(self.state, event.symbol, "15m", side, now_ts)
+            push_15m = obos_15m == LevelState.IN and not in_cooldown
+            logger.info(f"[EMA21] {event.symbol} 15m state={obos_15m.value} push_15m={push_15m}")
 
-        if self.state.is_ema21_in_cooldown(event.symbol, side, now_ts, _EMA21_COOLDOWN):
-            logger.info(f"[EMA21冷冻] {event.symbol} {event.interval} {side.value} 在冷冻期内，跳过")
+        if not push_main and not push_15m:
+            logger.info(f"[EMA21] {event.symbol} {event.interval} 无满足条件的推送，跳过")
             return
 
         is_main = event.symbol in get_main_topic_symbols()
@@ -248,20 +250,36 @@ class EmaService:
         align_label = "多头排列" if event.alignment == "bullish" else "反向排列"
         role_label = "支撑" if event.role == "S" else "阻力"
 
-        msg = "\n".join([
-            f"〽️ {event.symbol} EMA21 触及",
-            ts_to_utc_str(event.ts),
-            f"EMA21: {event.ema_value} ({role_label}) | {event.interval}",
-            f"均线: {align_label}",
-            f"{dot} {event.interval} {side_label} IN",
-        ])
-        chart_title = f"{event.symbol}  {event.interval}【EMA21触及】{side_label} {align_label}"
-
         self.state.record_ema21_push(event.symbol, side, now_ts)
-        logger.warning(f"[EMA21推送] {event.symbol} {event.interval} {side.value} {event.alignment}")
-        msg_id = await send_with_chart(
-            tg=self.tg, msg=msg,
-            chat_id=settings.TG_CHAT_ID, topic_id=actual_topic,
-            symbol=event.symbol, max_iv=event.interval, chart_title=chart_title,
-        )
-        self.exhaustion_svc.on_push(event.symbol, side, now_ts, actual_topic, msg_id)
+
+        if push_main:
+            msg = "\n".join([
+                f"〽️ {event.symbol} EMA21 触及",
+                f"EMA21: {event.ema_value} ({role_label}) | {event.interval}",
+                f"均线: {align_label}",
+                f"{dot} {event.interval} {side_label} IN",
+            ])
+            chart_title = f"{event.symbol}  {event.interval}【EMA21触及】{side_label} {align_label}"
+            logger.warning(f"[EMA21推送] {event.symbol} {event.interval} {side.value} {event.alignment}")
+            msg_id = await send_with_chart(
+                tg=self.tg, msg=msg,
+                chat_id=settings.TG_CHAT_ID, topic_id=actual_topic,
+                symbol=event.symbol, max_iv=event.interval, chart_title=chart_title,
+            )
+            self.exhaustion_svc.on_push(event.symbol, side, now_ts, actual_topic, msg_id)
+
+        if push_15m:
+            msg_15m = "\n".join([
+                f"〽️ {event.symbol} EMA21 触及",
+                f"EMA21: {event.ema_value} ({role_label}) | {event.interval}",
+                f"均线: {align_label}",
+                f"{dot} 15m {side_label} IN",
+            ])
+            chart_title_15m = f"{event.symbol}  {event.interval}【EMA21触及】{side_label} {align_label} | 15m"
+            logger.warning(f"[EMA21-15m推送] {event.symbol} {side.value} {event.alignment}")
+            msg_id_15m = await send_with_chart(
+                tg=self.tg, msg=msg_15m,
+                chat_id=settings.TG_CHAT_ID, topic_id=settings.TG_TOPIC_15MIN,
+                symbol=event.symbol, max_iv=event.interval, chart_title=chart_title_15m,
+            )
+            self.exhaustion_svc.on_push(event.symbol, side, now_ts, settings.TG_TOPIC_15MIN, msg_id_15m)

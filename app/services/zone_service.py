@@ -54,7 +54,6 @@ def _format_zone_message(event: ZoneEvent, matched: List[Tuple[str, str, Side, L
     """
     lines = [
         f"📍 {event.symbol} 关键区域触及",
-        ts_to_utc_str(event.ts),
         f"区域: {event.bot} - {event.top} ({event.role}) | {event.interval}",
         "配合:",
     ]
@@ -275,9 +274,7 @@ class ZoneService:
 
                         msg = "\n".join([
                             f"📍 {symbol} 关键区域合成",
-                            ts_to_utc_str(now_ts),
                             f"区域: {bot} - {top} ({role}) | {zone_iv}",
-                            f"触及于: {ts_to_utc_str(touch_ts)}",
                             "配合:",
                             f"{dot} {obos_iv} {side_label} IN",
                         ])

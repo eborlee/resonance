@@ -8,7 +8,6 @@ from ..config import settings, get_universe, get_main_topic_symbols, get_us_stoc
 from ..domain.models import DivergenceEvent, Side
 from ..infra.store import AppState
 from ..adapters.tg_client import TelegramClient
-from ..infra.utils import ts_to_utc_str
 from ..infra.chart import send_with_chart
 
 if TYPE_CHECKING:
@@ -46,8 +45,7 @@ def _format_message(event: DivergenceEvent, sides: list[Side]) -> str:
     """
     side_labels = " / ".join(s.display for s in sides)
     return "\n".join([
-        f"📐 {event.symbol} 顶底背离",
-        f"{ts_to_utc_str(event.ts)} | {event.interval}",
+        f"📐 {event.symbol} 顶底背离 | {event.interval}",
         f"当前状态: {side_labels}",
     ])
 

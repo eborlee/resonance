@@ -13,7 +13,6 @@ from ..domain.models import (
     IntervalState,
     ResonanceSnapshot,
 )
-from ..infra.utils import ts_to_utc_str
 from ..infra.store import AppState
 from ..adapters.tg_client import TelegramClient
 from .router import (
@@ -353,7 +352,6 @@ class ResonanceService:
                     msg_prefix = "‼️升级‼️" if is_upgrade else ""
                     msg = (
                         f"{msg_prefix}\n"
-                        f"{ts_to_utc_str(event2.ts)}\n"
                         f"{format_message(snap, list(canon))}"
                     )
 

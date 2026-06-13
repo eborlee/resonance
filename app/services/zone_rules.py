@@ -27,7 +27,7 @@ ZONE_INTERVAL_TO_TOPIC_ATTR: dict[str, str] = {
 # per-rule 覆盖：优先级高于 ZONE_INTERVAL_TO_TOPIC_ATTR
 # skip_main=True 表示该规则不走 main topic 转发
 ZONE_RULE_OVERRIDES: dict[tuple, dict] = {
-    ("1h", "15m"): {"topic_attr": "TG_TOPIC_15MIN", "cooldown": 2 * 3600, "skip_main": True},
+    # ("1h", "15m"): {"topic_attr": "TG_TOPIC_15MIN", "cooldown": 2 * 3600, "skip_main": True},
 }
 
 # (ema200_interval, obos_interval)
