@@ -17,6 +17,7 @@ class TelegramClient:
         text: str,
         message_thread_id: int | None = None,
         reply_to_message_id: int | None = None,
+        reply_markup: dict | None = None,
     ) -> int | None:
         """发送文字消息，返回 Telegram message_id（失败返回 None）。"""
         payload: dict = {"chat_id": chat_id, "text": text, "disable_web_page_preview": True}
@@ -24,6 +25,8 @@ class TelegramClient:
             payload["message_thread_id"] = int(message_thread_id)
         if reply_to_message_id is not None:
             payload["reply_to_message_id"] = int(reply_to_message_id)
+        if reply_markup is not None:
+            payload["reply_markup"] = reply_markup
 
         async with httpx.AsyncClient(timeout=10.0) as client:
             r = await client.post(f"{self.base}/sendMessage", json=payload)
@@ -34,7 +37,7 @@ class TelegramClient:
             return data.get("result", {}).get("message_id")
 
     async def get_updates(self, offset: int | None = None, timeout: int = 20) -> List[Dict[str, Any]]:
-        params: Dict[str, Any] = {"timeout": timeout, "allowed_updates": ["message"]}
+        params: Dict[str, Any] = {"timeout": timeout, "allowed_updates": ["message", "callback_query"]}
         if offset is not None:
             params["offset"] = offset
 
@@ -64,6 +67,28 @@ class TelegramClient:
             )
             r.raise_for_status()
             return r.json()
+
+    async def edit_message_text(
+        self,
+        chat_id: str,
+        message_id: int,
+        text: str,
+        reply_markup: dict | None = None,
+    ) -> None:
+        payload: dict = {"chat_id": chat_id, "message_id": message_id, "text": text, "disable_web_page_preview": True}
+        if reply_markup is not None:
+            payload["reply_markup"] = reply_markup
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.post(f"{self.base}/editMessageText", json=payload)
+            if r.status_code == 400 and "not modified" in r.text.lower():
+                return
+            r.raise_for_status()
+
+    async def answer_callback_query(self, callback_query_id: str) -> None:
+        payload = {"callback_query_id": callback_query_id}
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.post(f"{self.base}/answerCallbackQuery", json=payload)
+            r.raise_for_status()
 
     async def set_my_commands(self, commands: List[Dict[str, str]]) -> None:
         """注册 bot 命令菜单（私聊范围）"""

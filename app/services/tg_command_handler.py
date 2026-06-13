@@ -18,11 +18,111 @@ from ..infra.utils import ts_to_utc_str
 
 logger = logging.getLogger(__name__)
 
+# 单用户私聊，无并发问题
+_pending: dict[str, str] = {}  # chat_id → action ("add")
+
+
+# ── Keyboard builders ────────────────────────────────────────────────────────
+
+def _back_keyboard() -> dict:
+    return {"inline_keyboard": [[{"text": "← 返回菜单", "callback_data": "menu"}]]}
+
+
+def _main_menu_keyboard() -> dict:
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "📊 cache",      "callback_data": "sel:cache"},
+                {"text": "🔗 combo",      "callback_data": "sel:combo"},
+            ],
+            [
+                {"text": "📍 zone",       "callback_data": "sel:zone"},
+                {"text": "📐 divergence", "callback_data": "sel:divergence"},
+            ],
+            [
+                {"text": "🎯 tracking",   "callback_data": "cmd:tracking"},
+                {"text": "🔍 scan",       "callback_data": "sel:scan"},
+            ],
+            [
+                {"text": "✅ check",      "callback_data": "sel:check"},
+                {"text": "🌐 universe",   "callback_data": "cmd:universe"},
+            ],
+            [
+                {"text": "📊 stats",      "callback_data": "cmd:stats"},
+                {"text": "⚙️ analysis",   "callback_data": "sel:analysis"},
+            ],
+            [
+                {"text": "📰 briefing",   "callback_data": "sel:briefing"},
+                {"text": "❓ help",       "callback_data": "cmd:help"},
+            ],
+            [
+                {"text": "➕ add",        "callback_data": "cmd:add"},
+                {"text": "➖ remove",     "callback_data": "sel:remove"},
+            ],
+        ]
+    }
+
+
+def _symbol_keyboard(action: str) -> dict:
+    symbols = sorted(get_universe().keys())
+    rows = []
+    for i in range(0, len(symbols), 3):
+        chunk = symbols[i:i + 3]
+        rows.append([
+            {"text": s.replace("USDT", ""), "callback_data": f"do:{action}:{s}"}
+            for s in chunk
+        ])
+    rows.append([{"text": "← 返回", "callback_data": "menu"}])
+    return {"inline_keyboard": rows}
+
+
+def _scan_keyboard() -> dict:
+    intervals = ["1W", "1D", "4h", "1h", "15m", "3m"]
+    rows = [
+        [
+            {"text": intervals[i],     "callback_data": f"do:scan:{intervals[i]}"},
+            {"text": intervals[i + 1], "callback_data": f"do:scan:{intervals[i + 1]}"},
+        ]
+        for i in range(0, len(intervals), 2)
+    ]
+    rows.append([
+        {"text": "全部",   "callback_data": "do:scan:all"},
+        {"text": "← 返回", "callback_data": "menu"},
+    ])
+    return {"inline_keyboard": rows}
+
+
+def _analysis_keyboard() -> dict:
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "✅ 开启", "callback_data": "do:analysis:on"},
+                {"text": "⏹️ 关闭",  "callback_data": "do:analysis:off"},
+            ],
+            [{"text": "← 返回", "callback_data": "menu"}],
+        ]
+    }
+
+
+def _briefing_keyboard() -> dict:
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "✅ 开启",    "callback_data": "do:briefing:on"},
+                {"text": "⏹️ 关闭",   "callback_data": "do:briefing:off"},
+                {"text": "⚡ 立即推送", "callback_data": "do:briefing:now"},
+            ],
+            [{"text": "← 返回", "callback_data": "menu"}],
+        ]
+    }
+
+
 COMMANDS = """/cache <symbol>      — 各周期 IN/WARM/OUT 状态
 /combo <symbol>      — 当前 active 共振组合
 /zone <symbol>       — zone 触及 warm 状态
 /divergence <symbol> — 各周期上次背离触发时间
 /tracking            — 当前衰竭追踪窗口
+/scan [interval]     — 扫描全量标的超买/超卖（如 /scan 4h）
 /check <symbol>      — 查询品种是否在 universe 中
 /add <symbol>        — 添加品种到 universe
 /remove <symbol>     — 从 universe 移除品种
@@ -282,12 +382,172 @@ def _handle_tracking(state: AppState, now_ts: float) -> str:
     return "\n".join(lines)
 
 
+def _handle_scan(state: AppState, interval: str | None) -> str:
+    uni = get_universe()
+    if not uni:
+        return "universe 为空"
+
+    if interval:
+        all_ivs = {iv for ivs in uni.values() for iv in ivs}
+        iv_key = next((iv for iv in all_ivs if iv.lower() == interval.lower()), None)
+        if iv_key is None:
+            return f"❌ 周期 {interval} 不在 universe 中"
+        intervals_to_scan = [iv_key]
+        title = f"🔍 {iv_key} 超买/超卖扫描"
+    else:
+        intervals_to_scan = ["1W", "1D", "4h", "1h", "15m", "3m"]
+        title = "🔍 超买/超卖扫描（全周期）"
+
+    lines = [title]
+    any_result = False
+
+    for iv in intervals_to_scan:
+        ob_in, os_in = [], []
+        for symbol, allowed_ivs in sorted(uni.items()):
+            if iv not in allowed_ivs:
+                continue
+            rec = state.cache.get((symbol, iv))
+            if rec is None:
+                continue
+            if rec.in_overbought:
+                ob_in.append(symbol.replace("USDT", ""))
+            if rec.in_oversold:
+                os_in.append(symbol.replace("USDT", ""))
+
+        if not (ob_in or os_in):
+            continue
+        any_result = True
+        lines.append(f"\n【{iv}】")
+        if ob_in:
+            lines.append(f"  🔴 超买: {' '.join(ob_in)}")
+        if os_in:
+            lines.append(f"  🟢 超卖: {' '.join(os_in)}")
+
+    if not any_result:
+        lines.append("  暂无标的处于超买/超卖区域")
+    return "\n".join(lines)
+
+
 def _handle_universe() -> str:
     uni = get_universe()
     lines = [f"🌐 监控品种（{len(uni)}个）"]
     for symbol, intervals in uni.items():
         lines.append(f"  {symbol}: {', '.join(intervals)}")
     return "\n".join(lines)
+
+
+async def _process_callback_query(
+    cq: dict,
+    state: AppState,
+    tg: TelegramClient,
+    owner_chat_id: str,
+    stats: MessageStats | None = None,
+    briefing_svc: MarketBriefingService | None = None,
+) -> None:
+    cq_id = cq["id"]
+    msg = cq.get("message", {})
+    chat_id = str(msg.get("chat", {}).get("id", ""))
+    message_id = msg.get("message_id")
+
+    if chat_id != str(owner_chat_id) or message_id is None:
+        return
+
+    await tg.answer_callback_query(cq_id)
+
+    data = cq.get("data", "")
+    parts = data.split(":", 2)
+    prefix = parts[0]
+    now_ts = time.time()
+
+    if data == "menu":
+        await tg.edit_message_text(chat_id, message_id, "🤖 指令菜单", reply_markup=_main_menu_keyboard())
+        return
+
+    if prefix == "cmd":
+        action = parts[1] if len(parts) > 1 else ""
+        if action == "tracking":
+            text = _handle_tracking(state, now_ts)
+        elif action == "universe":
+            text = _handle_universe()
+        elif action == "stats":
+            text = _handle_stats(stats) if stats is not None else "统计模块未启用"
+        elif action == "help":
+            text = COMMANDS
+        elif action == "add":
+            _pending[chat_id] = "add"
+            await tg.edit_message_text(
+                chat_id, message_id,
+                "请输入要添加的币种名称（如 SOLUSDT）：",
+                reply_markup={"inline_keyboard": [[{"text": "← 取消", "callback_data": "menu"}]]},
+            )
+            return
+        else:
+            return
+        await tg.edit_message_text(chat_id, message_id, text, reply_markup=_back_keyboard())
+        return
+
+    if prefix == "sel":
+        action = parts[1] if len(parts) > 1 else ""
+        if action in ("cache", "combo", "zone", "divergence", "check", "remove"):
+            await tg.edit_message_text(chat_id, message_id, "选择标的：", reply_markup=_symbol_keyboard(action))
+        elif action == "scan":
+            await tg.edit_message_text(chat_id, message_id, "选择周期：", reply_markup=_scan_keyboard())
+        elif action == "analysis":
+            status = "开启" if is_analysis_enabled() else "关闭"
+            await tg.edit_message_text(
+                chat_id, message_id,
+                f"⚙️ 4h 图表 AI 分析（当前：{status}）",
+                reply_markup=_analysis_keyboard(),
+            )
+        elif action == "briefing":
+            status = "开启" if is_briefing_enabled() else "关闭"
+            await tg.edit_message_text(
+                chat_id, message_id,
+                f"📰 每日市场简报（当前：{status}，美东 08:00 推送）",
+                reply_markup=_briefing_keyboard(),
+            )
+        return
+
+    if prefix == "do":
+        action = parts[1] if len(parts) > 1 else ""
+        param = parts[2] if len(parts) > 2 else None
+
+        if action == "cache":
+            text = _handle_cache(state, param or "", now_ts)
+        elif action == "combo":
+            text = _handle_combo(state, param or "")
+        elif action == "zone":
+            text = _handle_zone(state, param or "", now_ts)
+        elif action == "divergence":
+            text = _handle_divergence(state, param or "")
+        elif action == "check":
+            text = _handle_check(param or "")
+        elif action == "remove":
+            text = _handle_remove(param or "")
+        elif action == "scan":
+            text = _handle_scan(state, None if param == "all" else param)
+        elif action == "analysis":
+            set_analysis_enabled(param == "on")
+            text = "✅ 4h 图表AI分析已开启" if param == "on" else "⏹️ 4h 图表AI分析已关闭"
+        elif action == "briefing":
+            if param == "on":
+                set_briefing_enabled(True)
+                text = "✅ 每日市场简报已开启"
+            elif param == "off":
+                set_briefing_enabled(False)
+                text = "⏹️ 每日市场简报已关闭"
+            elif param == "now":
+                if briefing_svc is None:
+                    text = "❌ 简报服务未启用（ANTHROPIC_API_KEY 未配置）"
+                else:
+                    asyncio.create_task(briefing_svc.generate_and_send(force=True))
+                    text = "⏳ 已触发，简报生成中（约需 1-2 分钟后推送）"
+            else:
+                return
+        else:
+            return
+
+        await tg.edit_message_text(chat_id, message_id, text, reply_markup=_back_keyboard())
 
 
 def _parse_command(text: str):
@@ -301,6 +561,11 @@ def _parse_command(text: str):
 
 
 async def _process_update(update: dict, state: AppState, tg: TelegramClient, owner_chat_id: str, stats: MessageStats | None = None, briefing_svc: MarketBriefingService | None = None) -> None:
+    # callback_query（按钮点击）
+    if "callback_query" in update:
+        await _process_callback_query(update["callback_query"], state, tg, owner_chat_id, stats, briefing_svc)
+        return
+
     msg = update.get("message")
     if not msg:
         return
@@ -315,11 +580,42 @@ async def _process_update(update: dict, state: AppState, tg: TelegramClient, own
         logger.debug(f"忽略非授权消息 chat_id={chat_id} type={chat_type}")
         return
 
+    now_ts = time.time()
+
+    # pending 文本输入（如 add 新币）
+    if text and not text.startswith("/") and chat_id in _pending:
+        action = _pending.pop(chat_id)
+        if action == "add":
+            reply = _handle_add(text.strip().upper())
+        else:
+            reply = "❌ 未知操作"
+        try:
+            await tg.send_message(chat_id=chat_id, text=reply)
+            await tg.send_message(chat_id=chat_id, text="🤖 指令菜单", reply_markup=_main_menu_keyboard())
+        except Exception:
+            logger.error("发送失败", exc_info=True)
+        return
+
     cmd, arg = _parse_command(text)
     if cmd is None:
         return
 
-    now_ts = time.time()
+    # /start 和 /menu 发主菜单
+    if cmd in ("/start", "/menu"):
+        try:
+            await tg.send_message(chat_id=chat_id, text="🤖 指令菜单", reply_markup=_main_menu_keyboard())
+        except Exception:
+            logger.error("发送失败", exc_info=True)
+        return
+
+    # /cancel 清除 pending
+    if cmd == "/cancel":
+        _pending.pop(chat_id, None)
+        try:
+            await tg.send_message(chat_id=chat_id, text="已取消", reply_markup=_main_menu_keyboard())
+        except Exception:
+            logger.error("发送失败", exc_info=True)
+        return
 
     if cmd == "/cache":
         if not arg:
@@ -344,6 +640,9 @@ async def _process_update(update: dict, state: AppState, tg: TelegramClient, own
             reply = "用法: /divergence <symbol>，例如 /divergence BTCUSDT"
         else:
             reply = _handle_divergence(state, arg)
+
+    elif cmd == "/scan":
+        reply = _handle_scan(state, arg.lower() if arg else None)
 
     elif cmd == "/tracking":
         reply = _handle_tracking(state, now_ts)
@@ -413,10 +712,13 @@ async def _process_update(update: dict, state: AppState, tg: TelegramClient, own
 
 
 COMMAND_MENU = [
+    {"command": "menu",     "description": "打开交互式指令菜单"},
+    {"command": "start",    "description": "打开交互式指令菜单"},
     {"command": "cache",    "description": "查询品种各周期缓存状态，如 /cache BTCUSDT"},
     {"command": "combo",    "description": "查询当前 active 共振组合，如 /combo ETHUSDT"},
     {"command": "zone",       "description": "查询 zone 触及 warm 状态，如 /zone BTCUSDT"},
     {"command": "divergence", "description": "查询各周期上次背离触发时间，如 /divergence BTCUSDT"},
+    {"command": "scan",      "description": "扫描超买/超卖标的，如 /scan 4h 或 /scan 1h"},
     {"command": "tracking",  "description": "查看当前活跃的衰竭追踪窗口"},
     {"command": "check",    "description": "查询品种是否在 universe 中，如 /check BTCUSDT"},
     {"command": "add",      "description": "添加品种到 universe，如 /add SOLUSDT"},
