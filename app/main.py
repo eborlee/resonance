@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import datetime
 import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -22,6 +21,8 @@ from .services.volatile_service import VolatileService
 from .services.tg_command_handler import polling_loop
 from .services.exhaustion_service import ExhaustionService, Ema21CrossEma200Rule
 from .services.market_briefing_service import MarketBriefingService
+from .services.obos_scan_service import ObosScanService
+from .services.daily_summary_service import DailySummaryService
 import logging
 from .infra.logger_config import setup_logging
 
@@ -81,6 +82,8 @@ exhaustion_svc.add_skip_filter(
     lambda zone_iv=None, obos_iv=None, **_: zone_iv == "1h" and obos_iv == "15m"
 )
 
+obos_scan_svc = ObosScanService(state=state, tg=tg)
+daily_summary_svc = DailySummaryService(stats=msg_stats, tg=tg)
 svc = ResonanceService(state=state, tg=tg, exhaustion_svc=exhaustion_svc)
 zone_svc = ZoneService(state=state, tg=tg, exhaustion_svc=exhaustion_svc)
 ema_svc = EmaService(state=state, tg=tg, exhaustion_svc=exhaustion_svc)
@@ -88,63 +91,14 @@ divergence_svc = DivergenceService(state=state, tg=tg, exhaustion_svc=exhaustion
 volatile_svc = VolatileService(state=state, tg=tg, exhaustion_svc=exhaustion_svc)
 
 
-async def daily_summary_loop():
-    while True:
-        now = datetime.datetime.now(datetime.timezone.utc)
-        next_midnight = (now + datetime.timedelta(days=1)).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        )
-        await asyncio.sleep((next_midnight - now).total_seconds())
-
-        counts, tokens = msg_stats.get_and_reset()
-        if not counts and tokens.analysis_count == 0:
-            continue
-
-        topic_names = settings.topic_name_map()
-        date_str = now.strftime("%Y-%m-%d")
-        lines = [f"📊 {date_str} 推送汇总（UTC）"]
-        total = 0
-        for topic_id, count in sorted(counts.items(), key=lambda x: -(x[1])):
-            name = topic_names.get(topic_id, f"Topic#{topic_id}")
-            lines.append(f"  {name}: {count} 条")
-            total += count
-        lines.append(f"  ————")
-        lines.append(f"  合计: {total} 条")
-
-        if tokens.analysis_count > 0:
-            cost = (
-                tokens.input_tokens * 3.00
-                + tokens.output_tokens * 15.00
-                + tokens.cache_creation_tokens * 3.75
-                + tokens.cache_read_tokens * 0.30
-            ) / 1_000_000
-            lines.append("")
-            lines.append("🤖 AI分析用量")
-            lines.append(f"  分析次数: {tokens.analysis_count}")
-            lines.append(f"  输入tokens: {tokens.input_tokens:,}")
-            lines.append(f"  输出tokens: {tokens.output_tokens:,}")
-            if tokens.cache_read_tokens:
-                lines.append(f"  缓存命中: {tokens.cache_read_tokens:,}")
-            if tokens.cache_creation_tokens:
-                lines.append(f"  缓存写入: {tokens.cache_creation_tokens:,}")
-            lines.append(f"  估算成本: ${cost:.4f}")
-
-        try:
-            await tg.send_message(
-                chat_id=settings.TG_CHAT_ID,
-                text="\n".join(lines),
-                message_thread_id=settings.TG_TOPIC_SUMMARY,
-            )
-        except Exception:
-            logger.error("daily_summary 发送失败", exc_info=True)
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     task = asyncio.create_task(
         polling_loop(state=state, tg=tg, owner_chat_id=settings.TG_OWNER_CHAT_ID, stats=msg_stats, briefing_svc=_briefing_svc)
     )
-    summary_task = asyncio.create_task(daily_summary_loop())
+    summary_task = asyncio.create_task(daily_summary_svc.run_loop())
+    scan_task = asyncio.create_task(obos_scan_svc.run_loop())
     exhaustion_task = asyncio.create_task(exhaustion_svc.run_forever())
     briefing_task = (
         asyncio.create_task(_briefing_svc.run_daily_loop())
@@ -154,10 +108,11 @@ async def lifespan(app: FastAPI):
     yield
     task.cancel()
     summary_task.cancel()
+    scan_task.cancel()
     exhaustion_task.cancel()
     if briefing_task is not None:
         briefing_task.cancel()
-    for t in (task, summary_task, exhaustion_task, briefing_task):
+    for t in (task, summary_task, scan_task, exhaustion_task, briefing_task):
         if t is None:
             continue
         try:
