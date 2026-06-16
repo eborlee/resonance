@@ -23,6 +23,7 @@ from .services.exhaustion_service import ExhaustionService, Ema21CrossEma200Rule
 from .services.market_briefing_service import MarketBriefingService
 from .services.obos_scan_service import ObosScanService
 from .services.daily_summary_service import DailySummaryService
+from .services.heartbeat_scheduler import HeartbeatScheduler
 import logging
 from .infra.logger_config import setup_logging
 
@@ -84,6 +85,7 @@ exhaustion_svc.add_skip_filter(
 
 obos_scan_svc = ObosScanService(state=state, tg=tg)
 daily_summary_svc = DailySummaryService(stats=msg_stats, tg=tg)
+heartbeat_scheduler = HeartbeatScheduler(state=state)
 svc = ResonanceService(state=state, tg=tg, exhaustion_svc=exhaustion_svc)
 zone_svc = ZoneService(state=state, tg=tg, exhaustion_svc=exhaustion_svc)
 ema_svc = EmaService(state=state, tg=tg, exhaustion_svc=exhaustion_svc)
@@ -100,6 +102,7 @@ async def lifespan(app: FastAPI):
     summary_task = asyncio.create_task(daily_summary_svc.run_loop())
     scan_task = asyncio.create_task(obos_scan_svc.run_loop())
     exhaustion_task = asyncio.create_task(exhaustion_svc.run_forever())
+    heartbeat_task = asyncio.create_task(heartbeat_scheduler.run_forever())
     briefing_task = (
         asyncio.create_task(_briefing_svc.run_daily_loop())
         if _briefing_svc is not None
@@ -110,9 +113,10 @@ async def lifespan(app: FastAPI):
     summary_task.cancel()
     scan_task.cancel()
     exhaustion_task.cancel()
+    heartbeat_task.cancel()
     if briefing_task is not None:
         briefing_task.cancel()
-    for t in (task, summary_task, scan_task, exhaustion_task, briefing_task):
+    for t in (task, summary_task, scan_task, exhaustion_task, heartbeat_task, briefing_task):
         if t is None:
             continue
         try:

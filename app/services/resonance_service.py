@@ -14,6 +14,7 @@ from ..domain.models import (
     ResonanceSnapshot,
 )
 from ..infra.store import AppState
+from ..infra.utils import is_crypto_symbol
 from ..adapters.tg_client import TelegramClient
 from .router import (
     choose_topic_by_max_interval,
@@ -134,6 +135,11 @@ class ResonanceService:
                 os_level=settings.OS_LEVEL,
                 now_ts=event2.ts,  # 使用事件时间戳记录退出时间
             )
+            # crypto 资产：通道外部心跳到达时记录时间戳，供调度器判断缺席
+            if is_crypto_symbol(event2.symbol) and (
+                value >= settings.OB_LEVEL or value <= settings.OS_LEVEL
+            ):
+                self.state.record_heartbeat(event2.symbol, interval, event2.ts)
             # intervals_updated.add(interval)
         # logger.debug(f"Step2:更新状态缓存：{self.state.cache}")
         allowed_intervals = get_universe().get(event2.symbol,[])

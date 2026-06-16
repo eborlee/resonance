@@ -106,6 +106,11 @@ class AppState:
         # 衰竭追踪窗口：key=(symbol, side)，新推送覆盖旧窗口
         self.tracking_windows: Dict[Tuple[str, Side], TrackingWindow] = {}
 
+        # 心跳追踪（仅 crypto）：key=(symbol, interval) → 最近一次收到通道外部心跳的事件时间戳
+        self.last_heartbeat_ts: Dict[Tuple[str, str], float] = {}
+        # 调度器去重：记录每个 (symbol, interval) 最近一次已处理的 bar close 时间戳
+        self.last_checked_bar: Dict[Tuple[str, str], float] = {}
+
     # =========================================================
     # 更新某个周期的状态，同时记录“是否刚离开 IN”
     # =========================================================
@@ -344,6 +349,30 @@ class AppState:
         if candle_sec is None:
             return False
         return (now_ts - touch_ts) < 2 * candle_sec
+
+    # =========================================================
+    # 心跳追踪（crypto 专用）
+    # =========================================================
+    def record_heartbeat(self, symbol: str, interval: str, event_ts: float) -> None:
+        """记录收到通道外部心跳的时间戳（使用 K 线事件时间，不用 time.time()）。"""
+        self.last_heartbeat_ts[(symbol, interval)] = event_ts
+
+    def clear_zone_on_missed_heartbeat(self, symbol: str, interval: str, bar_close_ts: float) -> None:
+        """心跳缺席时翻转 OB/OS 状态并记录退出时间，供 WARM 机制使用。"""
+        rec = self.cache.get((symbol, interval))
+        if rec is None:
+            return
+        changed = False
+        if rec.in_overbought:
+            rec.last_exit_ts_overbought = bar_close_ts
+            rec.in_overbought = False
+            changed = True
+        if rec.in_oversold:
+            rec.last_exit_ts_oversold = bar_close_ts
+            rec.in_oversold = False
+            changed = True
+        if changed:
+            logger.info(f"[心跳缺席] {symbol}/{interval} 已清除 OB/OS 状态，bar_close={bar_close_ts:.0f}")
 
     # =========================================================
     # 推送门控（与 warm 无关，无需改）
