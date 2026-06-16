@@ -467,15 +467,23 @@ async def generate_multi_chart(
     price_label: Optional[str] = None,
 ) -> Optional[bytes]:
     """并发生成多个周期的K线图并垂直拼接为一张图。"""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    et_str = datetime.now(tz=ZoneInfo("America/New_York")).strftime("%m/%d %H:%M ET")
+
+    def _title(iv: str, is_top: bool) -> str:
+        base = f"{chart_title}  [{iv}]" if chart_title else f"{symbol}  {iv}"
+        return f"{base}  {et_str}" if is_top else base
+
     tasks = [
         generate_chart(
             symbol, iv,
             zone_bot=zone_bot, zone_top=zone_top, zone_role=zone_role,
             price_level=price_level,
-            chart_title=f"{chart_title}  [{iv}]" if chart_title else f"{symbol}  {iv}",
+            chart_title=_title(iv, i == 0),
             price_label=price_label,
         )
-        for iv in intervals
+        for i, iv in enumerate(intervals)
     ]
     results = await asyncio.gather(*tasks, return_exceptions=True)
     chart_bytes = [r for r in results if isinstance(r, bytes) and r]
