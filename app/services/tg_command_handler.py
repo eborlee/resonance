@@ -492,7 +492,7 @@ async def _process_callback_query(
             await tg.edit_message_text(chat_id, message_id, "选择标的：", reply_markup=_symbol_keyboard(action))
         elif action == "scan":
             text = _handle_scan(state, None)
-            await tg.edit_message_text(chat_id, message_id, text)
+            await tg.edit_message_text(chat_id, message_id, text, reply_markup=_back_keyboard())
         elif action == "analysis":
             status = "开启" if is_analysis_enabled() else "关闭"
             await tg.edit_message_text(
