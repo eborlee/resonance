@@ -395,8 +395,8 @@ def _handle_scan(state: AppState, interval: str | None) -> str:
         intervals_to_scan = [iv_key]
         title = f"🔍 {iv_key} 超买/超卖扫描"
     else:
-        intervals_to_scan = ["1W", "1D", "4h", "1h", "15m", "3m"]
-        title = "🔍 超买/超卖扫描（全周期）"
+        intervals_to_scan = ["1D", "4h", "1h", "15m"]
+        title = "🔍 超买/超卖扫描（1D→15m）"
 
     lines = [title]
     any_result = False
@@ -491,7 +491,8 @@ async def _process_callback_query(
         if action in ("cache", "combo", "zone", "divergence", "check", "remove"):
             await tg.edit_message_text(chat_id, message_id, "选择标的：", reply_markup=_symbol_keyboard(action))
         elif action == "scan":
-            await tg.edit_message_text(chat_id, message_id, "选择周期：", reply_markup=_scan_keyboard())
+            text = _handle_scan(state, None)
+            await tg.edit_message_text(chat_id, message_id, text)
         elif action == "analysis":
             status = "开启" if is_analysis_enabled() else "关闭"
             await tg.edit_message_text(
