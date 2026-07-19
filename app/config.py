@@ -60,7 +60,7 @@ class Settings(BaseSettings):
 
     # K线图天数配置
     CHART_1D_DAYS: int = 120  # 日线：显示最近N天的日线K线
-    CHART_4H_DAYS: int = 14   # 4h频道：拉取最近N天的4h K线
+    CHART_4H_DAYS: int = 20   # 4h频道：拉取最近N天的4h K线
     CHART_1H_DAYS: int = 5    # 1h频道：拉取最近N天的1h K线
     CHART_15M_BARS: int = 150 # 15m：固定显示根数
     CHART_3M_BARS: int = 120  # 3m：固定显示根数
