@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import List, Tuple, TYPE_CHECKING
 
-from ..config import settings, get_universe, get_main_topic_symbols, get_us_stock_symbols
+from ..config import settings, get_universe, get_us_stock_symbols
 from ..domain.models import ZoneEvent, TvEvent, Side, LevelState
 from ..infra.store import AppState
 from ..adapters.tg_client import TelegramClient
@@ -138,7 +138,6 @@ class ZoneService:
             return
 
         # Step 6：按目标 topic 分组
-        is_main_symbol = event.symbol in get_main_topic_symbols()
         is_us_stock = event.symbol in get_us_stock_symbols()
         topic_groups: dict[tuple, list] = defaultdict(list)
         for item in active_matched:
@@ -168,7 +167,6 @@ class ZoneService:
         for (t_attr, skip_main), items in topic_groups.items():
             topic_id = getattr(settings, t_attr)
             actual_topic = topic_id if skip_main else (
-                settings.TG_TOPIC_MAIN if is_main_symbol else
                 settings.TG_TOPIC_US if is_us_stock else
                 topic_id
             )
@@ -290,10 +288,8 @@ class ZoneService:
                             skip_main = False
 
                         topic_id = getattr(settings, t_attr)
-                        is_main = symbol in get_main_topic_symbols()
                         is_us_stock_reverse = symbol in get_us_stock_symbols()
                         actual_topic = topic_id if skip_main else (
-                            settings.TG_TOPIC_MAIN if is_main else
                             settings.TG_TOPIC_US if is_us_stock_reverse else
                             topic_id
                         )

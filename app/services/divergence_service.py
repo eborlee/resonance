@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from ..config import settings, get_universe, get_main_topic_symbols, get_us_stock_symbols
+from ..config import settings, get_universe, get_us_stock_symbols
 from ..domain.models import DivergenceEvent, Side
 from ..infra.store import AppState
 from ..adapters.tg_client import TelegramClient
@@ -84,10 +84,8 @@ class DivergenceService:
             logger.warning(f"Divergence interval 无对应topic配置: {event.interval}")
             return
         base_topic = getattr(settings, topic_attr)
-        is_main = event.symbol in get_main_topic_symbols()
         is_us = event.symbol in get_us_stock_symbols()
         topic_id = (
-            settings.TG_TOPIC_MAIN if is_main else
             settings.TG_TOPIC_US if is_us else
             base_topic
         )

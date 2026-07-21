@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import List, Tuple, TYPE_CHECKING
 
-from ..config import settings, get_universe, get_main_topic_symbols, get_us_stock_symbols
+from ..config import settings, get_universe, get_us_stock_symbols
 from ..domain.models import VolatileEvent, Side, LevelState
 from ..infra.store import AppState
 from ..adapters.tg_client import TelegramClient
@@ -59,10 +59,8 @@ class VolatileService:
             return
 
         topic_id = getattr(settings, topic_attr)
-        is_main = event.symbol in get_main_topic_symbols()
         is_us = event.symbol in get_us_stock_symbols()
         actual_topic = (
-            settings.TG_TOPIC_MAIN if is_main else
             settings.TG_TOPIC_US if is_us else
             topic_id
         )
