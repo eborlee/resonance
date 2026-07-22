@@ -52,12 +52,15 @@ class TelegramClient:
         photo: bytes,
         caption: str | None = None,
         message_thread_id: int | None = None,
-    ):
+        reply_to_message_id: int | None = None,
+    ) -> int | None:
         data: dict = {"chat_id": chat_id}
         if caption:
             data["caption"] = caption
         if message_thread_id is not None:
             data["message_thread_id"] = int(message_thread_id)
+        if reply_to_message_id is not None:
+            data["reply_to_message_id"] = int(reply_to_message_id)
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             r = await client.post(
@@ -66,7 +69,9 @@ class TelegramClient:
                 files={"photo": ("chart.png", photo, "image/png")},
             )
             r.raise_for_status()
-            return r.json()
+            if self._stats is not None:
+                self._stats.record(message_thread_id)
+            return r.json().get("result", {}).get("message_id")
 
     async def edit_message_text(
         self,

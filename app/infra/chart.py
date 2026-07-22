@@ -532,21 +532,46 @@ async def send_with_chart(
     """
     lock = _topic_locks.setdefault(topic_id, asyncio.Lock())
     async with lock:
-        msg_id = await tg.send_message(
-            chat_id=chat_id, text=msg, message_thread_id=topic_id,
-            reply_to_message_id=reply_to_message_id,
-        )
         photo: Optional[bytes] = None
+        photo_error: Optional[str] = None
         try:
-            photo = await generate_multi_chart(
-                symbol, chart_ivs if chart_ivs is not None else _chart_intervals_for(max_iv),
-                zone_bot=zone_bot, zone_top=zone_top, zone_role=zone_role,
-                price_level=price_level, chart_title=chart_title, price_label=price_label,
+            photo = await asyncio.wait_for(
+                generate_multi_chart(
+                    symbol, chart_ivs if chart_ivs is not None else _chart_intervals_for(max_iv),
+                    zone_bot=zone_bot, zone_top=zone_top, zone_role=zone_role,
+                    price_level=price_level, chart_title=chart_title, price_label=price_label,
+                ),
+                timeout=20.0,
             )
-            if photo is not None:
-                await tg.send_photo(chat_id=chat_id, photo=photo, message_thread_id=topic_id)
-        except Exception:
-            logger.warning(f"[Chart] 多图发送失败: {symbol}/{max_iv}", exc_info=True)
+            if photo is None:
+                photo_error = "数据获取失败"
+        except asyncio.TimeoutError:
+            logger.warning(f"[Chart] 多图生成超时: {symbol}/{max_iv}")
+            photo_error = "图表生成超时"
+        except Exception as e:
+            logger.warning(f"[Chart] 多图生成异常: {symbol}/{max_iv}", exc_info=True)
+            photo_error = str(e)[:120] or "未知异常"
+
+        if photo is not None:
+            try:
+                msg_id = await tg.send_photo(
+                    chat_id=chat_id, photo=photo, caption=msg,
+                    message_thread_id=topic_id, reply_to_message_id=reply_to_message_id,
+                )
+            except Exception as e:
+                logger.warning(f"[Chart] sendPhoto失败，降级纯文字: {symbol}/{max_iv} {e}")
+                photo = None
+                fallback_text = msg + f"\n⚠️ 图片发送失败（原因：{e}）"
+                msg_id = await tg.send_message(
+                    chat_id=chat_id, text=fallback_text, message_thread_id=topic_id,
+                    reply_to_message_id=reply_to_message_id,
+                )
+        else:
+            fallback_text = msg + f"\n⚠️ 图片发送失败（原因：{photo_error}）"
+            msg_id = await tg.send_message(
+                chat_id=chat_id, text=fallback_text, message_thread_id=topic_id,
+                reply_to_message_id=reply_to_message_id,
+            )
 
         if (
             photo is not None
