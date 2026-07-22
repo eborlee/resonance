@@ -429,7 +429,8 @@ class ResonanceService:
                 if rec.in_oversold:
                     obos_lines.append(f"🟢 {iv} 超卖 IN")
 
-        msg = text if not obos_lines else text + "\n\nob/os:\n" + "\n".join(obos_lines)
+        body_text = text if not obos_lines else text + "\n\nob/os:\n" + "\n".join(obos_lines)
+        msg = f"⚡ {body_text}"
 
         # obos_lines 格式: "🔴 4h 超买 IN" → "4h超买"
         obos_suffix = ("  |  " + " · ".join(
