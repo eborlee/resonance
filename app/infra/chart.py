@@ -352,8 +352,13 @@ def _draw_chart(
     margin = (y_max - y_min) * 0.08
     ax.set_ylim(y_min - margin, y_max + margin)
 
+    # 隐藏 x 轴刻度标签，减少垂直占用，并压缩底部空白
+    for a in axes:
+        a.tick_params(axis='x', labelbottom=False)
+    fig.subplots_adjust(bottom=0.02)
+
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
+    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight", pad_inches=0.05)
     plt.close(fig)
     buf.seek(0)
     return buf.read()
