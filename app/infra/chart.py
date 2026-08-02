@@ -304,7 +304,7 @@ def _draw_chart(
         style="classic",
         title=f"\n{title_str}",
         addplot=add_plots,
-        figsize=(14, 6),
+        figsize=(14, 5),
         returnfig=True,
         warn_too_much_data=9999,
     )
