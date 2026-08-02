@@ -499,12 +499,12 @@ async def generate_multi_chart(
 
 
 def _chart_intervals_for(max_iv: str) -> list[str]:
-    """根据信号最大周期决定要发送的3张图的周期组合。"""
+    """根据信号最大周期决定要发送的子图周期组合（从大到小）。"""
     if max_iv == "1D":
         return ["1D", "4h", "1h"]
-    if max_iv in ("1h", "15m", "3m"):
-        return ["1h", "15m", "3m"]
-    return ["4h", "1h", "15m"]
+    if max_iv == "4h":
+        return ["1D", "4h", "1h", "15m"]
+    return ["4h", "1h", "15m", "3m"]  # 1h / 15m / 3m / 价格警报
 
 
 async def send_with_chart(
