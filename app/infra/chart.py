@@ -353,7 +353,7 @@ def _draw_chart(
     ax.set_ylim(y_min - margin, y_max + margin)
 
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=200, bbox_inches="tight")
+    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
     plt.close(fig)
     buf.seek(0)
     return buf.read()
