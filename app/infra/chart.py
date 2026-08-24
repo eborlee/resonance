@@ -5,7 +5,7 @@ import io
 import logging
 import math
 import os
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import httpx
 
@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from .stats import MessageStats
 
 from ..config import settings
+from ..domain.models import Side, TREND_LABEL_SIDE
 
 logger = logging.getLogger(__name__)
 
@@ -271,9 +272,12 @@ def _draw_chart(
     price_level: Optional[float] = None,
     chart_title: Optional[str] = None,
     price_label: Optional[str] = None,
+    trend_annotations: Optional[List[Tuple[float, str]]] = None,
+    trend_annotation_errors: Optional[List[str]] = None,
 ) -> bytes:
     import mplfinance as mpf
     import matplotlib.pyplot as plt
+    import pandas as pd
     _ensure_cjk_font()
 
     closes = df["Close"].tolist()
@@ -346,6 +350,34 @@ def _draw_chart(
             color="#ef5350", fontsize=7, va="bottom",
         )
 
+    # 趋势标签标注：竖虚线 + 水平文字
+    # 做空方向（超买）：虚线画在图上半部分（图顶→中间）；做多方向（超卖）：虚线画在图下半部分（中间→图底）
+    # 每个标注单独 try/except：某一条画失败只跳过它自己，绝不影响K线图本身能否画出来
+    if trend_annotations:
+        for ts, label in trend_annotations:
+            try:
+                target = pd.Timestamp(ts, unit="s", tz="UTC")
+                pos = df.index.get_indexer([target], method="nearest")[0]
+                if pos < 0 or pos >= len(df):
+                    continue
+                side = TREND_LABEL_SIDE.get(label)
+                if side == Side.OVERBOUGHT:
+                    color, ymin, ymax, text_y, va = "#ef5350", 0.5, 1.0, 0.95, "top"
+                else:
+                    color, ymin, ymax, text_y, va = "#26a69a", 0.0, 0.5, 0.05, "bottom"
+                ax.axvline(pos, ymin=ymin, ymax=ymax, color=color, linewidth=1.0, linestyle="--", alpha=0.8, zorder=5)
+                text_kwargs = dict(
+                    transform=ax.get_xaxis_transform(),
+                    color=color, fontsize=7, va=va, ha="left",
+                )
+                if _cjk_font_prop is not None:
+                    text_kwargs["fontproperties"] = _cjk_font_prop
+                ax.text(pos, text_y, f" {label}", **text_kwargs)
+            except Exception as e:
+                logger.warning(f"[Chart] 趋势标注绘制失败，跳过该标注: {symbol} {label}", exc_info=True)
+                if trend_annotation_errors is not None:
+                    trend_annotation_errors.append(f"{label}: {e}")
+
     # 锁定 y 轴到 K 线价格范围，防止 zone/price 值远离时压扁蜡烛图
     y_min = df["Low"].min()
     y_max = df["High"].max()
@@ -390,6 +422,8 @@ async def generate_chart(
     price_level: Optional[float] = None,
     chart_title: Optional[str] = None,
     price_label: Optional[str] = None,
+    trend_annotations: Optional[List[Tuple[float, str]]] = None,
+    trend_annotation_errors: Optional[List[str]] = None,
 ) -> Optional[bytes]:
     """
     生成带EMA21/55/100/200的K线图（PNG字节）。
@@ -425,7 +459,7 @@ async def generate_chart(
         return None
 
     try:
-        return _draw_chart(symbol, label, df, display_n=display_n, zone_bot=zone_bot, zone_top=zone_top, zone_role=zone_role, price_level=price_level, chart_title=chart_title, price_label=price_label)
+        return _draw_chart(symbol, label, df, display_n=display_n, zone_bot=zone_bot, zone_top=zone_top, zone_role=zone_role, price_level=price_level, chart_title=chart_title, price_label=price_label, trend_annotations=trend_annotations, trend_annotation_errors=trend_annotation_errors)
     except Exception:
         logger.warning(f"[Chart] 绘图失败: {symbol}/{max_iv}", exc_info=True)
         return None
@@ -470,8 +504,14 @@ async def generate_multi_chart(
     price_level: Optional[float] = None,
     chart_title: Optional[str] = None,
     price_label: Optional[str] = None,
+    trend_annotations: Optional[List[Tuple[float, str]]] = None,
+    trend_annotations_iv: Optional[str] = None,
+    trend_annotation_errors: Optional[List[str]] = None,
 ) -> Optional[bytes]:
-    """并发生成多个周期的K线图并垂直拼接为一张图。"""
+    """并发生成多个周期的K线图并垂直拼接为一张图。
+
+    trend_annotations 只画在 trend_annotations_iv 对应的那张子图上（标注的 bar 位置只对该 interval 有意义）。
+    """
     from datetime import datetime
     from zoneinfo import ZoneInfo
     et_str = datetime.now(tz=ZoneInfo("America/New_York")).strftime("%m/%d %H:%M ET")
@@ -487,6 +527,8 @@ async def generate_multi_chart(
             price_level=price_level,
             chart_title=_title(iv, i == 0),
             price_label=price_label,
+            trend_annotations=trend_annotations if iv == trend_annotations_iv else None,
+            trend_annotation_errors=trend_annotation_errors if iv == trend_annotations_iv else None,
         )
         for i, iv in enumerate(intervals)
     ]
@@ -528,23 +570,30 @@ async def send_with_chart(
     chart_ivs: Optional[list] = None,
     analysis_context: Optional[str] = None,
     reply_to_message_id: Optional[int] = None,
+    trend_annotations: Optional[List[Tuple[float, str]]] = None,
 ) -> Optional[int]:
     """
     在话题锁保护下，顺序发送文字消息和K线图。
     同一 topic_id 的发送串行执行，保证文字和图片之间不被其他事件插入。
     文字发送失败会抛出异常；图片失败静默忽略。
     返回文字消息的 message_id（供后续消息引用）。
+
+    trend_annotations：近期趋势标签标注，只画在 max_iv 对应的那张子图上。
+    单条标注绘制失败只跳过该标注，K线图本身照常生成；失败信息会追加进推送文字里。
     """
     lock = _topic_locks.setdefault(topic_id, asyncio.Lock())
     async with lock:
         photo: Optional[bytes] = None
         photo_error: Optional[str] = None
+        trend_annotation_errors: List[str] = []
         try:
             photo = await asyncio.wait_for(
                 generate_multi_chart(
                     symbol, chart_ivs if chart_ivs is not None else _chart_intervals_for(max_iv),
                     zone_bot=zone_bot, zone_top=zone_top, zone_role=zone_role,
                     price_level=price_level, chart_title=chart_title, price_label=price_label,
+                    trend_annotations=trend_annotations, trend_annotations_iv=max_iv,
+                    trend_annotation_errors=trend_annotation_errors,
                 ),
                 timeout=20.0,
             )
@@ -556,6 +605,9 @@ async def send_with_chart(
         except Exception as e:
             logger.warning(f"[Chart] 多图生成异常: {symbol}/{max_iv}", exc_info=True)
             photo_error = str(e)[:120] or "未知异常"
+
+        if trend_annotation_errors:
+            msg = msg + f"\n⚠️ 趋势标注绘制失败（不影响图表本身）：{'；'.join(trend_annotation_errors)}"
 
         if photo is not None:
             try:

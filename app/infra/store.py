@@ -11,6 +11,9 @@ from ..domain.models import Side, TrackingWindow
 import logging
 logger = logging.getLogger(__name__)
 
+_TREND_LABEL_CACHE_MAX_LEN = 20  # 每个 (symbol, interval) 保留最近 N 条趋势标签，供图表标注使用
+
+
 # =========================
 # 每个 interval 的缓存结构
 # =========================
@@ -82,6 +85,12 @@ class AppState:
         # zone 触及缓存：记录每个 (symbol, interval, role) 最近一次触及的 (ts, top, bot)
         self.zone_touch_cache: Dict[Tuple[str, str, str], Tuple[float, float, float]] = {}
 
+        # ema 触及缓存：记录每个 (symbol, interval, period, role) 最近一次触及的 (ts, ema_value, close)
+        self.ema_touch_cache: Dict[Tuple[str, str, int, str], Tuple[float, float, float]] = {}
+
+        # 趋势标签缓存：记录每个 (symbol, interval) 最近触发的标签，供图表标注（Idea 1）使用
+        self.trend_label_cache: Dict[Tuple[str, str], List[Tuple[float, str]]] = {}
+
         # zone+obos 组合冷冻门控：key=(symbol, zone_iv, obos_iv, side) → last_pushed_ts
         self.zone_combo_last_pushed: Dict[Tuple[str, str, str, Side], float] = {}
 
@@ -93,6 +102,9 @@ class AppState:
 
         # ema21+排列+ob/os 冷冻门控：key=(symbol, side) → last_pushed_ts
         self.ema21_last_pushed: Dict[Tuple[str, Side], float] = {}
+
+        # 趋势标签推送冷冻：key=(symbol, interval, label) → last_pushed_ts
+        self.trend_label_last_pushed: Dict[Tuple[str, str, str], float] = {}
 
         # 波动预警状态：key=(symbol, interval) → expiry_ts（1.5倍K线时长）
         self.volatile_expiry: Dict[Tuple[str, str], float] = {}
@@ -208,6 +220,50 @@ class AppState:
     # =========================================================
     def update_zone_touch(self, symbol: str, interval: str, role: str, ts: float, top: float = 0.0, bot: float = 0.0) -> None:
         self.zone_touch_cache[(symbol, interval, role)] = (ts, top, bot)
+
+    # =========================================================
+    # EMA 触及状态管理
+    # =========================================================
+    def update_ema_touch(
+        self,
+        symbol: str,
+        interval: str,
+        period: int,
+        role: str,
+        ts: float,
+        ema_value: float = 0.0,
+        close: float = 0.0,
+    ) -> None:
+        self.ema_touch_cache[(symbol, interval, period, role)] = (ts, ema_value, close)
+
+    # =========================================================
+    # 趋势标签缓存（Idea 1：图表标注层）
+    # =========================================================
+    def record_trend_label(self, symbol: str, interval: str, ts: float, label: str) -> None:
+        key = (symbol, interval)
+        entries = self.trend_label_cache.setdefault(key, [])
+        entries.append((ts, label))
+        if len(entries) > _TREND_LABEL_CACHE_MAX_LEN:
+            del entries[: len(entries) - _TREND_LABEL_CACHE_MAX_LEN]
+
+    def get_recent_trend_labels(self, symbol: str, interval: str) -> List[Tuple[float, str]]:
+        return list(self.trend_label_cache.get((symbol, interval), []))
+
+    def is_trend_label_in_cooldown(
+        self,
+        symbol: str,
+        interval: str,
+        label: str,
+        now_ts: float,
+        cooldown_seconds: float,
+    ) -> bool:
+        last_ts = self.trend_label_last_pushed.get((symbol, interval, label))
+        if last_ts is None:
+            return False
+        return (now_ts - last_ts) < cooldown_seconds
+
+    def record_trend_label_push(self, symbol: str, interval: str, label: str, now_ts: float) -> None:
+        self.trend_label_last_pushed[(symbol, interval, label)] = now_ts
 
     def is_zone_combo_in_cooldown(
         self,

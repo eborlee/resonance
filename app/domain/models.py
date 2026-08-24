@@ -90,6 +90,33 @@ class VolatileEvent:
     ts: float
 
 
+# 趋势过滤器 8 个标签，顺序与 TV 端 alert body 的 labels 字段固定对应
+TREND_LABEL_NAMES: Tuple[str, ...] = (
+    "顺势多", "顺势空", "回调", "反弹", "区间反弹", "区间回落", "潜在顶部", "潜在底部",
+)
+
+# 标签方向：偏多的标签查超卖，偏空的标签查超买。
+# 反查 OB/OS（trend_service.py）和图表标注上色（chart.py）共用这份数据。
+TREND_LABEL_SIDE: Dict[str, Side] = {
+    "顺势多": Side.OVERSOLD,
+    "顺势空": Side.OVERBOUGHT,
+    "回调": Side.OVERBOUGHT,
+    "反弹": Side.OVERSOLD,
+    "区间反弹": Side.OVERSOLD,
+    "区间回落": Side.OVERBOUGHT,
+    "潜在顶部": Side.OVERBOUGHT,
+    "潜在底部": Side.OVERSOLD,
+}
+
+
+@dataclass(frozen=True)
+class TrendEvent:
+    symbol: str
+    interval: str   # normalized: "1h", "4h"
+    ts: float
+    labels: Tuple[str, ...]  # 本次 K 线收盘触发的标签名（可能同时触发多个）
+
+
 @dataclass
 class TrackingWindow:
     symbol: str

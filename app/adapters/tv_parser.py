@@ -4,7 +4,10 @@ from typing import Any, Dict, List, Tuple, Optional
 import time
 import re
 
-from ..domain.models import IntervalSignal, TvEvent, ZoneEvent, EmaEvent, DivergenceEvent, VolatileEvent
+from ..domain.models import (
+    IntervalSignal, TvEvent, ZoneEvent, EmaEvent, DivergenceEvent, VolatileEvent,
+    TrendEvent, TREND_LABEL_NAMES,
+)
 
 from datetime import datetime, timezone
 
@@ -55,7 +58,7 @@ INTERVAL_MAP: Dict[str, str] = {
     # day/week (常见写法)
     "D": "1D",
     "1D": "1D",
-    "W": "1D",
+    "W": "1W",
     "1W": "1W",
 }
 
@@ -324,6 +327,44 @@ def parse_volatile_payload(payload: Dict[str, Any]) -> Optional[VolatileEvent]:
     ts = parse_ts(raw_ts)
 
     return VolatileEvent(symbol=symbol, interval=interval, ts=ts)
+
+
+def parse_trend_payload(payload: Dict[str, Any]) -> Optional[TrendEvent]:
+    """
+    解析趋势过滤器 TV Webhook payload：
+
+    {
+      "symbol": "{{ticker}}",
+      "interval": "{{interval}}",
+      "timenow": "{{timenow}}",
+      "labels": "0 0 0 0 0 1 0 0"
+    }
+
+    labels：空格分隔的 8 位二进制值，顺序固定对应 TREND_LABEL_NAMES。
+    """
+    raw_symbol = payload.get("symbol") or payload.get("ticker") or ""
+    symbol = normalize_symbol(str(raw_symbol))
+    if not symbol:
+        return None
+
+    interval = map_interval(payload.get("interval"))
+    if interval is None:
+        return None
+
+    raw_labels = str(payload.get("labels", "")).split()
+    if len(raw_labels) != len(TREND_LABEL_NAMES):
+        return None
+
+    labels = tuple(
+        name for name, bit in zip(TREND_LABEL_NAMES, raw_labels) if bit == "1"
+    )
+    if not labels:
+        return None
+
+    raw_ts = payload.get("timenow") or payload.get("ts")
+    ts = parse_ts(raw_ts)
+
+    return TrendEvent(symbol=symbol, interval=interval, ts=ts, labels=labels)
 
 
 def parse_zone_payload(payload: Dict[str, Any]) -> Optional[ZoneEvent]:

@@ -85,14 +85,17 @@ class ZoneService:
             return
 
         # Step 3：更新 zone 触及缓存
-        self.state.update_zone_touch(
-            symbol=event.symbol,
-            interval=event.interval,
-            role=event.role,
-            ts=event.ts,
-            top=event.top,
-            bot=event.bot,
-        )
+        try:
+            self.state.update_zone_touch(
+                symbol=event.symbol,
+                interval=event.interval,
+                role=event.role,
+                ts=event.ts,
+                top=event.top,
+                bot=event.bot,
+            )
+        except Exception:
+            logger.error(f"[Zone触及缓存] 记录失败，不影响后续推送: {event}", exc_info=True)
 
         now_ts = event.ts
 

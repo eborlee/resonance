@@ -34,6 +34,20 @@ class EmaService:
 
     async def handle_event(self, event: EmaEvent) -> None:
         logger.info(f"收到EMA事件: period={event.period} {event}")
+
+        try:
+            self.state.update_ema_touch(
+                symbol=event.symbol,
+                interval=event.interval,
+                period=event.period,
+                role=event.role,
+                ts=event.ts,
+                ema_value=event.ema_value,
+                close=event.close,
+            )
+        except Exception:
+            logger.error(f"[EMA触及缓存] 记录失败，不影响后续推送: {event}", exc_info=True)
+
         if event.period == 200:
             await self._handle_ema200(event)
         elif event.period == 55:

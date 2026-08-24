@@ -12,12 +12,13 @@ from .infra.chart import register_analysis, register_stats
 from .adapters.tg_client import TelegramClient
 from .adapters.claude_client import ClaudeClient
 from .services.chart_analysis import ChartAnalysisService
-from .adapters.tv_parser import parse_tv_payload, parse_zone_payload, parse_ema_payload, parse_divergence_payload, parse_volatile_payload
+from .adapters.tv_parser import parse_tv_payload, parse_zone_payload, parse_ema_payload, parse_divergence_payload, parse_volatile_payload, parse_trend_payload
 from .services.resonance_service import ResonanceService
 from .services.zone_service import ZoneService
 from .services.ema_service import EmaService
 from .services.divergence_service import DivergenceService
 from .services.volatile_service import VolatileService
+from .services.trend_service import TrendService
 from .services.tg_command_handler import polling_loop
 from .services.exhaustion_service import ExhaustionService, Ema21CrossEma200Rule
 from .services.market_briefing_service import MarketBriefingService
@@ -91,6 +92,7 @@ zone_svc = ZoneService(state=state, tg=tg, exhaustion_svc=exhaustion_svc)
 ema_svc = EmaService(state=state, tg=tg, exhaustion_svc=exhaustion_svc)
 divergence_svc = DivergenceService(state=state, tg=tg, exhaustion_svc=exhaustion_svc)
 volatile_svc = VolatileService(state=state, tg=tg, exhaustion_svc=exhaustion_svc)
+trend_svc = TrendService(state=state, tg=tg)
 
 
 
@@ -204,3 +206,21 @@ async def tradingview_webhook(req: Request):
         # logger.info("解析失败json")
         await svc.handle_raw_text_fallback(req, err=e)
         return {"ok": True, "fallback": True}
+
+
+@app.post("/webhook/trend")
+async def trend_webhook(req: Request):
+    try:
+        payload = await req.json()
+    except Exception:
+        logger.error("trend webhook JSON 解析失败", exc_info=True)
+        return {"ok": True, "fallback": True}
+
+    try:
+        trend_event = parse_trend_payload(payload)
+        if trend_event is None:
+            return {"ok": True, "ignored": True}
+        await trend_svc.handle_event(trend_event)
+    except Exception:
+        logger.error("trend_service 处理异常", exc_info=True)
+    return {"ok": True}
