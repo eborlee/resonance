@@ -194,6 +194,7 @@ class ZoneService:
                 zone_role=event.role,
                 chart_title=chart_title,
                 chart_ivs=chart_ivs,
+                trend_annotations_provider=lambda iv, sym=event.symbol: self.state.get_recent_trend_labels(sym, iv),
             )
             # 取最大 obos_iv 对应的 side 注册追踪
             max_match = max(items, key=lambda m: settings.INTERVAL_ORDER.index(m[1]))
@@ -316,6 +317,7 @@ class ZoneService:
                             zone_role=role,
                             chart_title=chart_title,
                             chart_ivs=chart_ivs,
+                            trend_annotations_provider=lambda iv, sym=symbol: self.state.get_recent_trend_labels(sym, iv),
                         )
                         self.exhaustion_svc.on_push(
                             symbol, side, now_ts, actual_topic, msg_id,

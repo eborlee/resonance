@@ -132,6 +132,7 @@ class EmaService:
             tg=self.tg, msg="\n".join(msg_lines),
             chat_id=settings.TG_CHAT_ID, topic_id=actual_topic,
             symbol=event.symbol, max_iv=event.interval, chart_title=chart_title,
+            trend_annotations_provider=lambda iv, sym=event.symbol: self.state.get_recent_trend_labels(sym, iv),
         )
         for _, _, side, _ in active_matched:
             self.exhaustion_svc.on_push(event.symbol, side, now_ts, actual_topic, msg_id)
@@ -202,6 +203,7 @@ class EmaService:
                 tg=self.tg, msg=msg,
                 chat_id=settings.TG_CHAT_ID, topic_id=topic_id,
                 symbol=event.symbol, max_iv=event.interval, chart_title=chart_title,
+                trend_annotations_provider=lambda iv, sym=event.symbol: self.state.get_recent_trend_labels(sym, iv),
             )
             self.exhaustion_svc.on_push(event.symbol, side, now_ts, topic_id, msg_id)
 
@@ -273,6 +275,7 @@ class EmaService:
                 tg=self.tg, msg=msg,
                 chat_id=settings.TG_CHAT_ID, topic_id=actual_topic,
                 symbol=event.symbol, max_iv=event.interval, chart_title=chart_title,
+                trend_annotations_provider=lambda iv, sym=event.symbol: self.state.get_recent_trend_labels(sym, iv),
             )
             self.exhaustion_svc.on_push(event.symbol, side, now_ts, actual_topic, msg_id)
 
@@ -289,5 +292,6 @@ class EmaService:
                 tg=self.tg, msg=msg_15m,
                 chat_id=settings.TG_CHAT_ID, topic_id=settings.TG_TOPIC_15MIN,
                 symbol=event.symbol, max_iv=event.interval, chart_title=chart_title_15m,
+                trend_annotations_provider=lambda iv, sym=event.symbol: self.state.get_recent_trend_labels(sym, iv),
             )
             self.exhaustion_svc.on_push(event.symbol, side, now_ts, settings.TG_TOPIC_15MIN, msg_id_15m)

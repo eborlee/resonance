@@ -380,6 +380,7 @@ class ResonanceService:
                             symbol=event2.symbol,
                             max_iv=max_iv,
                             chart_title=chart_title,
+                            trend_annotations_provider=lambda iv, sym=event2.symbol: self.state.get_recent_trend_labels(sym, iv),
                         )
                     )
                     send_meta.append((side, actual_topic))
@@ -453,6 +454,7 @@ class ResonanceService:
                 price_level=price,
                 price_label=price_str,
                 chart_title=price_title,
+                trend_annotations_provider=lambda iv, sym=symbol: self.state.get_recent_trend_labels(sym, iv),
             )
             logger.info("tv cross text routed to topic %s", settings.TG_TOPIC_PRICE)
         except Exception:

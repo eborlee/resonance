@@ -227,4 +227,5 @@ class ExhaustionService:
             symbol=window.symbol,
             max_iv="3m",
             chart_title=result.chart_title,
+            trend_annotations_provider=lambda iv, sym=window.symbol: self.state.get_recent_trend_labels(sym, iv),
         )

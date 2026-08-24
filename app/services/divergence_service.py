@@ -106,5 +106,6 @@ class DivergenceService:
             symbol=event.symbol,
             max_iv=event.interval,
             chart_title=chart_title,
+            trend_annotations_provider=lambda iv, sym=event.symbol: self.state.get_recent_trend_labels(sym, iv),
         )
         self.exhaustion_svc.on_push(event.symbol, in_sides[0], event.ts, topic_id, msg_id)

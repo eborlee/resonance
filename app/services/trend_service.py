@@ -160,13 +160,16 @@ class TrendService:
                 f"[Trend推送] {event.symbol} {event.interval} {label} "
                 f"obos={obos_matches} zone={len(zone_matches)} ema={len(ema_matches)}"
             )
-            await send_with_chart(
-                tg=self.tg,
-                msg=msg,
-                chat_id=settings.TG_CHAT_ID,
-                topic_id=settings.TG_TOPIC_MAIN,
-                symbol=event.symbol,
-                max_iv=event.interval,
-                trend_annotations=self.state.get_recent_trend_labels(event.symbol, event.interval),
-                chart_title=chart_title,
-            )
+            try:
+                await send_with_chart(
+                    tg=self.tg,
+                    msg=msg,
+                    chat_id=settings.TG_CHAT_ID,
+                    topic_id=settings.TG_TOPIC_MAIN,
+                    symbol=event.symbol,
+                    max_iv=event.interval,
+                    trend_annotations_provider=lambda iv, sym=event.symbol: self.state.get_recent_trend_labels(sym, iv),
+                    chart_title=chart_title,
+                )
+            except Exception:
+                logger.error(f"[Trend推送] 发送失败: {event.symbol} {event.interval} {label}", exc_info=True)

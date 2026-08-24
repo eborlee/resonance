@@ -111,5 +111,6 @@ class VolatileService:
                 symbol=event.symbol,
                 max_iv=event.interval,
                 chart_title=chart_title,
+                trend_annotations_provider=lambda iv, sym=event.symbol: self.state.get_recent_trend_labels(sym, iv),
             )
             self.exhaustion_svc.on_push(event.symbol, side, now_ts, actual_topic, msg_id)

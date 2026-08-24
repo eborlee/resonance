@@ -5,7 +5,7 @@ import io
 import logging
 import math
 import os
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 import httpx
 
@@ -366,7 +366,7 @@ def _draw_chart(
                 else:
                     color, ymin, ymax, text_y, va = "#26a69a", 0.0, 0.5, 0.05, "bottom"
                 ax.axvline(pos, ymin=ymin, ymax=ymax, color=color, linewidth=1.0, linestyle="--", alpha=0.8, zorder=5)
-                text_kwargs = dict(
+                text_kwargs: dict[str, Any] = dict(
                     transform=ax.get_xaxis_transform(),
                     color=color, fontsize=7, va=va, ha="left",
                 )
@@ -504,13 +504,13 @@ async def generate_multi_chart(
     price_level: Optional[float] = None,
     chart_title: Optional[str] = None,
     price_label: Optional[str] = None,
-    trend_annotations: Optional[List[Tuple[float, str]]] = None,
-    trend_annotations_iv: Optional[str] = None,
+    trend_annotations_per_iv: Optional[Dict[str, List[Tuple[float, str]]]] = None,
     trend_annotation_errors: Optional[List[str]] = None,
 ) -> Optional[bytes]:
     """并发生成多个周期的K线图并垂直拼接为一张图。
 
-    trend_annotations 只画在 trend_annotations_iv 对应的那张子图上（标注的 bar 位置只对该 interval 有意义）。
+    trend_annotations_per_iv：每个周期各自的趋势标签标注，key=interval，value=[(ts, label), ...]。
+    缓存为空的周期对应 key 不存在或值为空列表，该子图不画标注。
     """
     from datetime import datetime
     from zoneinfo import ZoneInfo
@@ -527,8 +527,8 @@ async def generate_multi_chart(
             price_level=price_level,
             chart_title=_title(iv, i == 0),
             price_label=price_label,
-            trend_annotations=trend_annotations if iv == trend_annotations_iv else None,
-            trend_annotation_errors=trend_annotation_errors if iv == trend_annotations_iv else None,
+            trend_annotations=(trend_annotations_per_iv or {}).get(iv) or None,
+            trend_annotation_errors=trend_annotation_errors,
         )
         for i, iv in enumerate(intervals)
     ]
@@ -570,7 +570,7 @@ async def send_with_chart(
     chart_ivs: Optional[list] = None,
     analysis_context: Optional[str] = None,
     reply_to_message_id: Optional[int] = None,
-    trend_annotations: Optional[List[Tuple[float, str]]] = None,
+    trend_annotations_provider: Optional[Callable[[str], List[Tuple[float, str]]]] = None,
 ) -> Optional[int]:
     """
     在话题锁保护下，顺序发送文字消息和K线图。
@@ -578,7 +578,8 @@ async def send_with_chart(
     文字发送失败会抛出异常；图片失败静默忽略。
     返回文字消息的 message_id（供后续消息引用）。
 
-    trend_annotations：近期趋势标签标注，只画在 max_iv 对应的那张子图上。
+    trend_annotations_provider：可调用对象，接受 interval 字符串，返回该周期近期趋势标签列表。
+    每张子图各自调用一次，缓存为空时返回空列表，该子图不画标注。
     单条标注绘制失败只跳过该标注，K线图本身照常生成；失败信息会追加进推送文字里。
     """
     lock = _topic_locks.setdefault(topic_id, asyncio.Lock())
@@ -586,13 +587,18 @@ async def send_with_chart(
         photo: Optional[bytes] = None
         photo_error: Optional[str] = None
         trend_annotation_errors: List[str] = []
+        _chart_ivs = chart_ivs if chart_ivs is not None else _chart_intervals_for(max_iv)
+        _trend_per_iv: Optional[Dict[str, List[Tuple[float, str]]]] = (
+            {iv: trend_annotations_provider(iv) for iv in _chart_ivs}
+            if trend_annotations_provider is not None else None
+        )
         try:
             photo = await asyncio.wait_for(
                 generate_multi_chart(
-                    symbol, chart_ivs if chart_ivs is not None else _chart_intervals_for(max_iv),
+                    symbol, _chart_ivs,
                     zone_bot=zone_bot, zone_top=zone_top, zone_role=zone_role,
                     price_level=price_level, chart_title=chart_title, price_label=price_label,
-                    trend_annotations=trend_annotations, trend_annotations_iv=max_iv,
+                    trend_annotations_per_iv=_trend_per_iv,
                     trend_annotation_errors=trend_annotation_errors,
                 ),
                 timeout=20.0,
