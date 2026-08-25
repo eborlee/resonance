@@ -623,7 +623,7 @@ async def send_with_chart(
         trend_annotation_errors: List[str] = []
         _chart_ivs = chart_ivs if chart_ivs is not None else _chart_intervals_for(max_iv)
         _trend_per_iv: Optional[Dict[str, List[Tuple[float, str]]]] = (
-            {iv: trend_annotations_provider(iv) for iv in _chart_ivs}
+            {iv: (trend_annotations_provider(iv) or [])[-3:] for iv in _chart_ivs}
             if trend_annotations_provider is not None else None
         )
         try:
