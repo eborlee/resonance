@@ -354,8 +354,15 @@ def _draw_chart(
             color="#ef5350", fontsize=7, va="bottom",
         )
 
-    # 趋势标签标注：竖虚线 + 水平文字
-    # 做空方向（超买）：虚线画在图上半部分（图顶→中间）；做多方向（超卖）：虚线画在图下半部分（中间→图底）
+    # 提前计算 ylim，供趋势标注循环使用
+    y_min = df["Low"].min()
+    y_max = df["High"].max()
+    margin = (y_max - y_min) * 0.08
+    y_axis_min = y_min - margin
+    y_axis_max = y_max + margin
+    y_axis_span = y_axis_max - y_axis_min
+
+    # 趋势标签标注：竖虚线从蜡烛 high/low 出发到边框 + 文字贴紧边框
     # 每个标注单独 try/except：某一条画失败只跳过它自己，绝不影响K线图本身能否画出来
     if trend_annotations:
         for ts, label in trend_annotations:
@@ -369,11 +376,15 @@ def _draw_chart(
                 if pos < 0 or pos >= len(df):
                     continue
                 side = TREND_LABEL_SIDE.get(label)
+                gap = 0.008 * y_axis_span
                 if side == Side.OVERBOUGHT:
-                    line_color, box_color, ymin, ymax, text_y, va = "#ef5350", "#b71c1c", 0.5, 1.0, 0.90, "top"
+                    line_color, box_color, text_y, va = "#ef5350", "#b71c1c", 1.0, "top"
+                    candle_frac = max(0.0, min(1.0, (df["High"].iloc[pos] + gap - y_axis_min) / y_axis_span))
+                    ax.axvline(pos, ymin=candle_frac, ymax=1.0, color=line_color, linewidth=1.0, linestyle="--", alpha=0.8, zorder=5)
                 else:
-                    line_color, box_color, ymin, ymax, text_y, va = "#26a69a", "#1b8a5a", 0.0, 0.5, 0.10, "bottom"
-                ax.axvline(pos, ymin=ymin, ymax=ymax, color=line_color, linewidth=1.0, linestyle="--", alpha=0.8, zorder=5)
+                    line_color, box_color, text_y, va = "#26a69a", "#1b8a5a", 0.0, "bottom"
+                    candle_frac = max(0.0, min(1.0, (df["Low"].iloc[pos] - gap - y_axis_min) / y_axis_span))
+                    ax.axvline(pos, ymin=0.0, ymax=candle_frac, color=line_color, linewidth=1.0, linestyle="--", alpha=0.8, zorder=5)
                 text_kwargs: dict[str, Any] = dict(
                     transform=ax.get_xaxis_transform(),
                     color="white", fontsize=12, va=va, ha="center", zorder=6,
@@ -388,11 +399,8 @@ def _draw_chart(
                 if trend_annotation_errors is not None:
                     trend_annotation_errors.append(f"{label}: {e}")
 
-    # 锁定 y 轴到 K 线价格范围，防止 zone/price 值远离时压扁蜡烛图
-    y_min = df["Low"].min()
-    y_max = df["High"].max()
-    margin = (y_max - y_min) * 0.08
-    ax.set_ylim(y_min - margin, y_max + margin)
+    # 锁定 y 轴到 K 线价格范围
+    ax.set_ylim(y_axis_min, y_axis_max)
 
     # 隐藏 x 轴刻度标签，减少垂直占用，并压缩底部空白
     for a in axes:
