@@ -124,7 +124,7 @@ class TrendService:
                 if obos_state in (LevelState.IN, LevelState.WARM):
                     obos_matches.append((obos_iv, obos_state))
 
-            # 2. 近期区域触及（只查触发同级别，不分 R/S）
+            # 2. 近期区域触及（只查触发同级别，不分 R/S），只保留最近一条
             zone_matches: List[Tuple[str, float, float, str, float]] = []
             for (sym, iv, role), (touch_ts, top, bot) in self.state.zone_touch_cache.items():
                 if sym != event.symbol or iv != event.interval:
@@ -132,8 +132,9 @@ class TrendService:
                 if now_ts - touch_ts > window_sec:
                     continue
                 zone_matches.append((role, top, bot, iv, touch_ts))
+            zone_matches = sorted(zone_matches, key=lambda x: x[4], reverse=True)[:1]
 
-            # 3. 近期均线触及（只查触发同级别，不分 period/role）
+            # 3. 近期均线触及（只查触发同级别），只保留时间最近的一条（不区分 period/role）
             ema_matches: List[Tuple[int, str, float, float, float]] = []
             for (sym, iv, period, role), (touch_ts, ema_value, close) in self.state.ema_touch_cache.items():
                 if sym != event.symbol or iv != event.interval:
@@ -141,6 +142,7 @@ class TrendService:
                 if now_ts - touch_ts > window_sec:
                     continue
                 ema_matches.append((period, role, ema_value, close, touch_ts))
+            ema_matches = sorted(ema_matches, key=lambda x: x[4], reverse=True)[:1]
 
             if not obos_matches and not zone_matches and not ema_matches:
                 logger.info(f"[Trend] {event.symbol} {event.interval} {label} 无配合，静默跳过")
@@ -155,7 +157,18 @@ class TrendService:
             self.state.record_trend_label_push(event.symbol, event.interval, label, now_ts)
 
             msg = _format_trend_message(event, label, side, obos_matches, zone_matches, ema_matches, now_ts)
-            chart_title = f"{event.symbol}  {event.interval}【趋势信号】{label}"
+
+            base_symbol = event.symbol.upper().replace("USDT", "")
+            suffix_parts: List[str] = []
+            if obos_matches:
+                suffix_parts.append("超卖" if side == Side.OVERSOLD else "超买")
+            if zone_matches:
+                suffix_parts.append("关键区域")
+            if ema_matches:
+                suffix_parts.append("接触均线")
+            suffix = (" + " + " + ".join(suffix_parts)) if suffix_parts else ""
+            chart_title = f"{base_symbol}  {event.interval} {label}{suffix}"
+            chart_title_color = "#26a69a" if side == Side.OVERSOLD else "#ef5350"
             logger.warning(
                 f"[Trend推送] {event.symbol} {event.interval} {label} "
                 f"obos={obos_matches} zone={len(zone_matches)} ema={len(ema_matches)}"
@@ -170,6 +183,7 @@ class TrendService:
                     max_iv=event.interval,
                     trend_annotations_provider=lambda iv, sym=event.symbol: self.state.get_recent_trend_labels(sym, iv),
                     chart_title=chart_title,
+                    title_color=chart_title_color,
                 )
             except Exception:
                 logger.error(f"[Trend推送] 发送失败: {event.symbol} {event.interval} {label}", exc_info=True)

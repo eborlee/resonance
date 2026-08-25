@@ -274,6 +274,8 @@ def _draw_chart(
     price_label: Optional[str] = None,
     trend_annotations: Optional[List[Tuple[float, str]]] = None,
     trend_annotation_errors: Optional[List[str]] = None,
+    title_color: Optional[str] = None,
+    ylabel_text: Optional[str] = None,
 ) -> bytes:
     import mplfinance as mpf
     import matplotlib.pyplot as plt
@@ -302,6 +304,7 @@ def _draw_chart(
         df = df.iloc[-display_n:]
 
     title_str = chart_title if chart_title else f"{symbol}  {interval_label}"
+    title_str = title_str.replace("USDT", "").replace("usdt", "")
     fig, axes = mpf.plot(
         df,
         type="candle",
@@ -316,7 +319,8 @@ def _draw_chart(
     ax = axes[0]
 
     # 直接将 CJK 字体注入 suptitle Text 对象，绕过名称查找回落问题
-    title_color = "#ef5350" if "超买" in title_str else "#26a69a" if "超卖" in title_str else "#000000"
+    if title_color is None:
+        title_color = "#ef5350" if "超买" in title_str else "#26a69a" if "超卖" in title_str else "#000000"
     if _cjk_font_prop is not None:
         for txt in fig.texts:
             txt.set_fontproperties(_cjk_font_prop)
@@ -364,13 +368,14 @@ def _draw_chart(
                     continue
                 side = TREND_LABEL_SIDE.get(label)
                 if side == Side.OVERBOUGHT:
-                    line_color, box_color, ymin, ymax, text_y, va = "#ef5350", "#b71c1c", 0.5, 1.0, 1.0, "top"
+                    line_color, box_color, ymin, ymax, text_y, va = "#ef5350", "#b71c1c", 0.5, 1.0, 0.90, "top"
                 else:
-                    line_color, box_color, ymin, ymax, text_y, va = "#26a69a", "#1b8a5a", 0.0, 0.5, 0.0, "bottom"
+                    line_color, box_color, ymin, ymax, text_y, va = "#26a69a", "#1b8a5a", 0.0, 0.5, 0.10, "bottom"
                 ax.axvline(pos, ymin=ymin, ymax=ymax, color=line_color, linewidth=1.0, linestyle="--", alpha=0.8, zorder=5)
                 text_kwargs: dict[str, Any] = dict(
                     transform=ax.get_xaxis_transform(),
                     color="white", fontsize=12, va=va, ha="center", zorder=6,
+                    clip_on=False,
                     bbox=dict(boxstyle="round,pad=0.35", facecolor=box_color, edgecolor="none", alpha=0.95),
                 )
                 if _cjk_font_prop is not None:
@@ -390,6 +395,10 @@ def _draw_chart(
     # 隐藏 x 轴刻度标签，减少垂直占用，并压缩底部空白
     for a in axes:
         a.tick_params(axis='x', labelbottom=False)
+        a.set_ylabel("")
+    if ylabel_text:
+        ax.set_ylabel(ylabel_text, fontsize=13, rotation=0, labelpad=8)
+        ax.yaxis.set_label_position("right")
     fig.subplots_adjust(bottom=0.02)
 
     buf = io.BytesIO()
@@ -427,6 +436,8 @@ async def generate_chart(
     price_label: Optional[str] = None,
     trend_annotations: Optional[List[Tuple[float, str]]] = None,
     trend_annotation_errors: Optional[List[str]] = None,
+    title_color: Optional[str] = None,
+    ylabel_text: Optional[str] = None,
 ) -> Optional[bytes]:
     """
     生成带EMA21/55/100/200的K线图（PNG字节）。
@@ -462,7 +473,7 @@ async def generate_chart(
         return None
 
     try:
-        return _draw_chart(symbol, label, df, display_n=display_n, zone_bot=zone_bot, zone_top=zone_top, zone_role=zone_role, price_level=price_level, chart_title=chart_title, price_label=price_label, trend_annotations=trend_annotations, trend_annotation_errors=trend_annotation_errors)
+        return _draw_chart(symbol, label, df, display_n=display_n, zone_bot=zone_bot, zone_top=zone_top, zone_role=zone_role, price_level=price_level, chart_title=chart_title, price_label=price_label, trend_annotations=trend_annotations, trend_annotation_errors=trend_annotation_errors, title_color=title_color, ylabel_text=ylabel_text)
     except Exception:
         logger.warning(f"[Chart] 绘图失败: {symbol}/{max_iv}", exc_info=True)
         return None
@@ -509,6 +520,7 @@ async def generate_multi_chart(
     price_label: Optional[str] = None,
     trend_annotations_per_iv: Optional[Dict[str, List[Tuple[float, str]]]] = None,
     trend_annotation_errors: Optional[List[str]] = None,
+    title_color: Optional[str] = None,
 ) -> Optional[bytes]:
     """并发生成多个周期的K线图并垂直拼接为一张图。
 
@@ -519,8 +531,8 @@ async def generate_multi_chart(
     from zoneinfo import ZoneInfo
     et_str = datetime.now(tz=ZoneInfo("America/New_York")).strftime("%m/%d %H:%M ET")
 
-    def _title(iv: str, is_top: bool) -> str:
-        base = f"{chart_title}  [{iv}]" if chart_title else f"{symbol}  {iv}"
+    def _title(is_top: bool) -> str:
+        base = chart_title if chart_title else symbol
         return f"{base}  {et_str}" if is_top else base
 
     tasks = [
@@ -528,10 +540,12 @@ async def generate_multi_chart(
             symbol, iv,
             zone_bot=zone_bot, zone_top=zone_top, zone_role=zone_role,
             price_level=price_level,
-            chart_title=_title(iv, i == 0),
+            chart_title=_title(i == 0),
             price_label=price_label,
             trend_annotations=(trend_annotations_per_iv or {}).get(iv) or None,
             trend_annotation_errors=trend_annotation_errors,
+            title_color=title_color,
+            ylabel_text=iv,
         )
         for i, iv in enumerate(intervals)
     ]
@@ -574,6 +588,7 @@ async def send_with_chart(
     analysis_context: Optional[str] = None,
     reply_to_message_id: Optional[int] = None,
     trend_annotations_provider: Optional[Callable[[str], List[Tuple[float, str]]]] = None,
+    title_color: Optional[str] = None,
 ) -> Optional[int]:
     """
     在话题锁保护下，顺序发送文字消息和K线图。
@@ -603,6 +618,7 @@ async def send_with_chart(
                     price_level=price_level, chart_title=chart_title, price_label=price_label,
                     trend_annotations_per_iv=_trend_per_iv,
                     trend_annotation_errors=trend_annotation_errors,
+                    title_color=title_color,
                 ),
                 timeout=20.0,
             )

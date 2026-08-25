@@ -286,7 +286,7 @@ class EmaService:
                 f"均线: {align_label}",
                 f"{dot} 15m {side_label} IN",
             ])
-            chart_title_15m = f"{event.symbol}  {event.interval}【EMA21触及】{side_label} {align_label} | 15m"
+            chart_title_15m = f"{event.symbol}  {event.interval}【EMA21触及】{align_label} | 15m{side_label}"
             logger.warning(f"[EMA21-15m推送] {event.symbol} {side.value} {event.alignment}")
             msg_id_15m = await send_with_chart(
                 tg=self.tg, msg=msg_15m,
