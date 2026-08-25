@@ -397,8 +397,14 @@ def _draw_chart(
         a.tick_params(axis='x', labelbottom=False)
         a.set_ylabel("")
     if ylabel_text:
-        ax.set_ylabel(ylabel_text, fontsize=13, rotation=0, labelpad=8)
-        ax.yaxis.set_label_position("right")
+        ax.text(
+            0.5, 0.5, ylabel_text,
+            transform=ax.transAxes,
+            fontsize=96, color="#b0b0b0", alpha=0.18,
+            ha="center", va="center",
+            fontweight="bold",
+            zorder=1,
+        )
     fig.subplots_adjust(bottom=0.02)
 
     buf = io.BytesIO()
