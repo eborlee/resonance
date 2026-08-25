@@ -173,6 +173,7 @@ class TrendService:
                 f"[Trend推送] {event.symbol} {event.interval} {label} "
                 f"obos={obos_matches} zone={len(zone_matches)} ema={len(ema_matches)}"
             )
+            z_role, z_top, z_bot = (zone_matches[0][0], zone_matches[0][1], zone_matches[0][2]) if zone_matches else (None, None, None)
             try:
                 await send_with_chart(
                     tg=self.tg,
@@ -181,6 +182,9 @@ class TrendService:
                     topic_id=settings.TG_TOPIC_MAIN,
                     symbol=event.symbol,
                     max_iv=event.interval,
+                    zone_bot=z_bot,
+                    zone_top=z_top,
+                    zone_role=z_role,
                     trend_annotations_provider=lambda iv, sym=event.symbol: self.state.get_recent_trend_labels(sym, iv),
                     chart_title=chart_title,
                     title_color=chart_title_color,
