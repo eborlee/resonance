@@ -361,8 +361,10 @@ def _draw_chart(
         for ts, label in trend_annotations:
             try:
                 target = pd.Timestamp(ts, unit="s", tz="UTC")
-                if target < df.index[0] or target > df.index[-1]:
+                if target < df.index[0]:
                     continue
+                if target > df.index[-1]:
+                    target = df.index[-1]
                 pos = df.index.get_indexer([target], method="nearest")[0]
                 if pos < 0 or pos >= len(df):
                     continue
