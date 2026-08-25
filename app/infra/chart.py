@@ -364,17 +364,18 @@ def _draw_chart(
                     continue
                 side = TREND_LABEL_SIDE.get(label)
                 if side == Side.OVERBOUGHT:
-                    color, ymin, ymax, text_y, va = "#ef5350", 0.5, 1.0, 0.95, "top"
+                    line_color, box_color, ymin, ymax, text_y, va = "#ef5350", "#b71c1c", 0.5, 1.0, 1.0, "top"
                 else:
-                    color, ymin, ymax, text_y, va = "#26a69a", 0.0, 0.5, 0.05, "bottom"
-                ax.axvline(pos, ymin=ymin, ymax=ymax, color=color, linewidth=1.0, linestyle="--", alpha=0.8, zorder=5)
+                    line_color, box_color, ymin, ymax, text_y, va = "#26a69a", "#1b8a5a", 0.0, 0.5, 0.0, "bottom"
+                ax.axvline(pos, ymin=ymin, ymax=ymax, color=line_color, linewidth=1.0, linestyle="--", alpha=0.8, zorder=5)
                 text_kwargs: dict[str, Any] = dict(
                     transform=ax.get_xaxis_transform(),
-                    color=color, fontsize=7, va=va, ha="left",
+                    color="white", fontsize=12, va=va, ha="center", zorder=6,
+                    bbox=dict(boxstyle="round,pad=0.35", facecolor=box_color, edgecolor="none", alpha=0.95),
                 )
                 if _cjk_font_prop is not None:
                     text_kwargs["fontproperties"] = _cjk_font_prop
-                ax.text(pos, text_y, f" {label}", **text_kwargs)
+                ax.text(pos, text_y, label, **text_kwargs)
             except Exception as e:
                 logger.warning(f"[Chart] 趋势标注绘制失败，跳过该标注: {symbol} {label}", exc_info=True)
                 if trend_annotation_errors is not None:
