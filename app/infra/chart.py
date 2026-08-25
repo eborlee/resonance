@@ -400,7 +400,7 @@ def _draw_chart(
         ax.text(
             0.5, 0.5, ylabel_text,
             transform=ax.transAxes,
-            fontsize=96, color="#b0b0b0", alpha=0.18,
+            fontsize=100, color="#b0b0b0", alpha=0.18,
             ha="center", va="center",
             fontweight="bold",
             zorder=1,
