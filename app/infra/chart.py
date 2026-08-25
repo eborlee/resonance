@@ -398,7 +398,7 @@ def _draw_chart(
         a.set_ylabel("")
     if ylabel_text:
         ax.text(
-            0.5, 0.5, ylabel_text,
+            0.25, 0.5, ylabel_text,
             transform=ax.transAxes,
             fontsize=100, color="#b0b0b0", alpha=0.18,
             ha="center", va="center",
