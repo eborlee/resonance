@@ -160,12 +160,14 @@ class TrendService:
 
             base_symbol = event.symbol.upper().replace("USDT", "")
             suffix_parts: List[str] = []
-            if obos_matches:
-                suffix_parts.append("超卖" if side == Side.OVERSOLD else "超买")
             if zone_matches:
                 suffix_parts.append("关键区域")
             if ema_matches:
                 suffix_parts.append("接触均线")
+            if obos_matches:
+                side_str = "超卖" if side == Side.OVERSOLD else "超买"
+                for obos_iv, _ in obos_matches:
+                    suffix_parts.append(f"{obos_iv}{side_str}")
             suffix = (" + " + " + ".join(suffix_parts)) if suffix_parts else ""
             chart_title = f"{base_symbol}  {event.interval} {label}{suffix}"
             chart_title_color = "#26a69a" if side == Side.OVERSOLD else "#ef5350"
