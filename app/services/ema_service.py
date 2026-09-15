@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import List, Tuple, TYPE_CHECKING
 
@@ -8,6 +9,7 @@ from ..domain.models import EmaEvent, Side, LevelState
 from ..infra.store import AppState
 from ..adapters.tg_client import TelegramClient
 from ..infra.chart import send_with_chart
+from ..adapters import dashboard_client
 from .zone_service import _get_obos_state
 from .zone_rules import EMA200_RULES, EMA200_INTERVAL_TO_TOPIC_ATTR
 
@@ -134,6 +136,14 @@ class EmaService:
             symbol=event.symbol, max_iv=event.interval, chart_title=chart_title,
             trend_annotations_provider=lambda iv, sym=event.symbol: self.state.get_recent_trend_labels(sym, iv),
         )
+        for _, obos_iv, side, _ in active_matched:
+            asyncio.create_task(dashboard_client.push_signal(
+                symbol=event.symbol,
+                direction="long" if side == Side.OVERSOLD else "short",
+                triggered_at=now_ts,
+                description=f"{event.interval}【EMA200触及】{obos_iv}{'超卖' if side == Side.OVERSOLD else '超买'}",
+                timeframe_combo=event.interval,
+            ))
         for _, _, side, _ in active_matched:
             self.exhaustion_svc.on_push(event.symbol, side, now_ts, actual_topic, msg_id)
 
@@ -205,6 +215,13 @@ class EmaService:
                 symbol=event.symbol, max_iv=event.interval, chart_title=chart_title,
                 trend_annotations_provider=lambda iv, sym=event.symbol: self.state.get_recent_trend_labels(sym, iv),
             )
+            asyncio.create_task(dashboard_client.push_signal(
+                symbol=event.symbol,
+                direction="long" if side == Side.OVERSOLD else "short",
+                triggered_at=now_ts,
+                description=f"{event.interval}【EMA55触及】1h+15m{side_label}",
+                timeframe_combo=event.interval,
+            ))
             self.exhaustion_svc.on_push(event.symbol, side, now_ts, topic_id, msg_id)
 
     # ────────────────────────────────────────────────
@@ -277,6 +294,13 @@ class EmaService:
                 symbol=event.symbol, max_iv=event.interval, chart_title=chart_title,
                 trend_annotations_provider=lambda iv, sym=event.symbol: self.state.get_recent_trend_labels(sym, iv),
             )
+            asyncio.create_task(dashboard_client.push_signal(
+                symbol=event.symbol,
+                direction="long" if side == Side.OVERSOLD else "short",
+                triggered_at=now_ts,
+                description=f"{event.interval}【EMA21触及】{side_label} {align_label}",
+                timeframe_combo=event.interval,
+            ))
             self.exhaustion_svc.on_push(event.symbol, side, now_ts, actual_topic, msg_id)
 
         if push_15m:
@@ -294,4 +318,11 @@ class EmaService:
                 symbol=event.symbol, max_iv=event.interval, chart_title=chart_title_15m,
                 trend_annotations_provider=lambda iv, sym=event.symbol: self.state.get_recent_trend_labels(sym, iv),
             )
+            asyncio.create_task(dashboard_client.push_signal(
+                symbol=event.symbol,
+                direction="long" if side == Side.OVERSOLD else "short",
+                triggered_at=now_ts,
+                description=f"{event.interval}【EMA21触及】{align_label} | 15m{side_label}",
+                timeframe_combo=event.interval,
+            ))
             self.exhaustion_svc.on_push(event.symbol, side, now_ts, settings.TG_TOPIC_15MIN, msg_id_15m)

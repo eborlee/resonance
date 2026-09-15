@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     TG_TOPIC_ENTRY: int
     TG_TOPIC_BRIEF: int = 17529  # 市场简报 topic
 
+    # Dashboard 归档
+    DASHBOARD_PUSH_URL: str = ""
+    DASHBOARD_PUSH_TOKEN: str = ""
+
     # Claude API
     ANTHROPIC_API_KEY: str = ""
     CLAUDE_MODEL: str = "claude-sonnet-4-6"

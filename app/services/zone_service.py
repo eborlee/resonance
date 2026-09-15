@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import List, Tuple, TYPE_CHECKING
 
@@ -9,6 +10,7 @@ from ..infra.store import AppState
 from ..adapters.tg_client import TelegramClient
 from ..infra.utils import ts_to_utc_str
 from ..infra.chart import send_with_chart
+from ..adapters import dashboard_client
 from collections import defaultdict
 from .zone_rules import ZONE_RULES, ZONE_INTERVAL_TO_TOPIC_ATTR, ZONE_RULE_OVERRIDES
 
@@ -196,6 +198,14 @@ class ZoneService:
                 chart_ivs=chart_ivs,
                 trend_annotations_provider=lambda iv, sym=event.symbol: self.state.get_recent_trend_labels(sym, iv),
             )
+            for _, obos_iv_i, side_i, _ in items:
+                asyncio.create_task(dashboard_client.push_signal(
+                    symbol=event.symbol,
+                    direction="long" if side_i == Side.OVERSOLD else "short",
+                    triggered_at=now_ts,
+                    description=f"{event.interval}【关键区域】{obos_iv_i}{'超卖' if side_i == Side.OVERSOLD else '超买'}",
+                    timeframe_combo=event.interval,
+                ))
             # 取最大 obos_iv 对应的 side 注册追踪
             max_match = max(items, key=lambda m: settings.INTERVAL_ORDER.index(m[1]))
             self.exhaustion_svc.on_push(
@@ -319,6 +329,13 @@ class ZoneService:
                             chart_ivs=chart_ivs,
                             trend_annotations_provider=lambda iv, sym=symbol: self.state.get_recent_trend_labels(sym, iv),
                         )
+                        asyncio.create_task(dashboard_client.push_signal(
+                            symbol=symbol,
+                            direction="long" if side == Side.OVERSOLD else "short",
+                            triggered_at=now_ts,
+                            description=f"{zone_iv}【区域合成】{obos_iv}{side_label}",
+                            timeframe_combo=zone_iv,
+                        ))
                         self.exhaustion_svc.on_push(
                             symbol, side, now_ts, actual_topic, msg_id,
                             zone_iv=zone_iv, obos_iv=obos_iv,

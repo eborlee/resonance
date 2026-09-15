@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import List, Tuple
 
@@ -8,6 +9,7 @@ from ..domain.models import TrendEvent, Side, LevelState
 from ..infra.store import AppState
 from ..adapters.tg_client import TelegramClient
 from ..infra.chart import send_with_chart
+from ..adapters import dashboard_client
 from .zone_service import _get_obos_state
 from .trend_rules import (
     TREND_LABEL_SIDE,
@@ -193,3 +195,10 @@ class TrendService:
                 )
             except Exception:
                 logger.error(f"[Trend推送] 发送失败: {event.symbol} {event.interval} {label}", exc_info=True)
+            asyncio.create_task(dashboard_client.push_signal(
+                symbol=event.symbol,
+                direction="long" if side == Side.OVERSOLD else "short",
+                triggered_at=now_ts,
+                description=f"{event.interval} {label}{suffix}",
+                timeframe_combo=event.interval,
+            ))

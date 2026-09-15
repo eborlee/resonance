@@ -22,6 +22,7 @@ from .router import (
     apply_min_interval_floor,
 )
 from ..infra.chart import send_with_chart
+from ..adapters import dashboard_client
 from collections import defaultdict
 
 if TYPE_CHECKING:
@@ -384,6 +385,14 @@ class ResonanceService:
                         )
                     )
                     send_meta.append((side, actual_topic))
+                    asyncio.create_task(dashboard_client.push_signal(
+                        symbol=event2.symbol,
+                        direction="long" if side == Side.OVERSOLD else "short",
+                        triggered_at=event2.ts,
+                        description=f"{max_iv}【共振】{obos_str}",
+                        timeframe_combo="+".join(canon),
+                        score_total=len(canon),
+                    ))
 
             # ===== Step 5.4：统一并发执行外部 IO =====
             if send_tasks:
