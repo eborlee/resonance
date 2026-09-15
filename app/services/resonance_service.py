@@ -22,7 +22,6 @@ from .router import (
     apply_min_interval_floor,
 )
 from ..infra.chart import send_with_chart
-from ..adapters import dashboard_client
 from collections import defaultdict
 
 if TYPE_CHECKING:
@@ -382,17 +381,17 @@ class ResonanceService:
                             max_iv=max_iv,
                             chart_title=chart_title,
                             trend_annotations_provider=lambda iv, sym=event2.symbol: self.state.get_recent_trend_labels(sym, iv),
+                            dashboard_push=[dict(
+                                symbol=event2.symbol,
+                                direction="long" if side == Side.OVERSOLD else "short",
+                                triggered_at=event2.ts,
+                                description=f"{max_iv}【共振】{obos_str}",
+                                timeframe_combo="+".join(canon),
+                                score_total=len(canon),
+                            )],
                         )
                     )
                     send_meta.append((side, actual_topic))
-                    asyncio.create_task(dashboard_client.push_signal(
-                        symbol=event2.symbol,
-                        direction="long" if side == Side.OVERSOLD else "short",
-                        triggered_at=event2.ts,
-                        description=f"{max_iv}【共振】{obos_str}",
-                        timeframe_combo="+".join(canon),
-                        score_total=len(canon),
-                    ))
 
             # ===== Step 5.4：统一并发执行外部 IO =====
             if send_tasks:
@@ -452,6 +451,7 @@ class ResonanceService:
             else f"{symbol}  价格警报{obos_suffix}"
         )
 
+        import time as _time
         try:
             await send_with_chart(
                 tg=self.tg,
@@ -464,16 +464,15 @@ class ResonanceService:
                 price_label=price_str,
                 chart_title=price_title,
                 trend_annotations_provider=lambda iv, sym=symbol: self.state.get_recent_trend_labels(sym, iv),
+                dashboard_push=[dict(
+                    symbol=symbol,
+                    direction="neutral",
+                    triggered_at=_time.time(),
+                    description=f"价格穿越 {price_str}" if price_str else "价格穿越",
+                    timeframe_combo="price",
+                )],
             )
             logger.info("tv cross text routed to topic %s", settings.TG_TOPIC_PRICE)
-            import time as _time
-            asyncio.create_task(dashboard_client.push_signal(
-                symbol=symbol,
-                direction="neutral",
-                triggered_at=_time.time(),
-                description=f"价格穿越 {price_str}" if price_str else "价格穿越",
-                timeframe_combo="price",
-            ))
         except Exception:
             logger.error("send cross text failed", exc_info=True)
 

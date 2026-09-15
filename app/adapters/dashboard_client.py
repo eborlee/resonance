@@ -24,17 +24,20 @@ async def push_signal(
     timeframe_combo: Optional[str] = None,
     score_total: Optional[int] = None,
     raw_payload: Optional[dict] = None,
+    image_bytes: Optional[bytes] = None,
 ) -> bool:
     """
     旁路归档到 resonance_dashboard。火忘模式：失败只记 warning，绝不抛异常。
     DASHBOARD_PUSH_URL 未配置时静默跳过。
+    image_bytes 若提供，JSON 推送成功后再 POST 图片到 /{signal_id}/image。
     """
     url = settings.DASHBOARD_PUSH_URL
     if not url:
         return False
 
+    signal_id = str(uuid.uuid4())
     payload: dict = {
-        "signal_id": str(uuid.uuid4()),
+        "signal_id": signal_id,
         "symbol": symbol,
         "direction": direction,
         "triggered_at": _ts_to_iso(triggered_at),
@@ -62,7 +65,24 @@ async def push_signal(
                     f"[Dashboard] 归档失败 {symbol} {direction}: HTTP {r.status_code} {r.text[:200]}"
                 )
                 return False
-        return True
     except Exception as e:
         logger.warning(f"[Dashboard] 归档异常 {symbol} {direction}: {e}")
         return False
+
+    if image_bytes:
+        image_url = f"{url.rstrip('/')}/{signal_id}/image"
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                r2 = await client.post(
+                    image_url,
+                    files={"file": ("chart.png", image_bytes, "image/png")},
+                    headers={"X-Resonance-Token": settings.DASHBOARD_PUSH_TOKEN},
+                )
+                if r2.status_code not in (200, 201):
+                    logger.warning(
+                        f"[Dashboard] 图片归档失败 {symbol} {signal_id}: HTTP {r2.status_code}"
+                    )
+        except Exception as e:
+            logger.warning(f"[Dashboard] 图片归档异常 {symbol} {signal_id}: {e}")
+
+    return True

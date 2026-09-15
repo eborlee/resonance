@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
@@ -10,7 +9,6 @@ from ..domain.models import DivergenceEvent, Side
 from ..infra.store import AppState
 from ..adapters.tg_client import TelegramClient
 from ..infra.chart import send_with_chart
-from ..adapters import dashboard_client
 
 if TYPE_CHECKING:
     from .exhaustion_service import ExhaustionService
@@ -109,13 +107,15 @@ class DivergenceService:
             max_iv=event.interval,
             chart_title=chart_title,
             trend_annotations_provider=lambda iv, sym=event.symbol: self.state.get_recent_trend_labels(sym, iv),
+            dashboard_push=[
+                dict(
+                    symbol=event.symbol,
+                    direction="long" if s == Side.OVERSOLD else "short",
+                    triggered_at=event.ts,
+                    description=f"{event.interval}【顶底背离】{'超卖' if s == Side.OVERSOLD else '超买'}",
+                    timeframe_combo=event.interval,
+                )
+                for s in in_sides
+            ],
         )
-        for s in in_sides:
-            asyncio.create_task(dashboard_client.push_signal(
-                symbol=event.symbol,
-                direction="long" if s == Side.OVERSOLD else "short",
-                triggered_at=event.ts,
-                description=f"{event.interval}【顶底背离】{'超卖' if s == Side.OVERSOLD else '超买'}",
-                timeframe_combo=event.interval,
-            ))
         self.exhaustion_svc.on_push(event.symbol, in_sides[0], event.ts, topic_id, msg_id)

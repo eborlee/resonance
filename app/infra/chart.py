@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from ..services.chart_analysis import ChartAnalysisService
     from .stats import MessageStats
 
+from ..adapters import dashboard_client as _dashboard_client
 from ..config import settings
 from ..domain.models import Side, TREND_LABEL_SIDE
 
@@ -605,6 +606,7 @@ async def send_with_chart(
     reply_to_message_id: Optional[int] = None,
     trend_annotations_provider: Optional[Callable[[str], List[Tuple[float, str]]]] = None,
     title_color: Optional[str] = None,
+    dashboard_push: Optional[List[dict]] = None,
 ) -> Optional[int]:
     """
     在话题锁保护下，顺序发送文字消息和K线图。
@@ -708,4 +710,9 @@ async def send_with_chart(
                             logger.warning("[Analysis] 超限通知发送失败", exc_info=True)
             except Exception:
                 logger.warning(f"[Analysis] 分析失败: {symbol}", exc_info=True)
+
+        if dashboard_push:
+            for entry in dashboard_push:
+                asyncio.create_task(_dashboard_client.push_signal(**entry, image_bytes=photo))
+
     return msg_id

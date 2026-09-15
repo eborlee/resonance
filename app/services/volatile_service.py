@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import List, Tuple, TYPE_CHECKING
 
@@ -9,7 +8,6 @@ from ..domain.models import VolatileEvent, Side, LevelState
 from ..infra.store import AppState
 from ..adapters.tg_client import TelegramClient
 from ..infra.chart import send_with_chart
-from ..adapters import dashboard_client
 from .zone_service import _get_obos_state
 
 if TYPE_CHECKING:
@@ -114,12 +112,12 @@ class VolatileService:
                 max_iv=event.interval,
                 chart_title=chart_title,
                 trend_annotations_provider=lambda iv, sym=event.symbol: self.state.get_recent_trend_labels(sym, iv),
+                dashboard_push=[dict(
+                    symbol=event.symbol,
+                    direction="long" if side == Side.OVERSOLD else "short",
+                    triggered_at=now_ts,
+                    description=f"{event.interval}【波动预警】{side_label}",
+                    timeframe_combo=event.interval,
+                )],
             )
-            asyncio.create_task(dashboard_client.push_signal(
-                symbol=event.symbol,
-                direction="long" if side == Side.OVERSOLD else "short",
-                triggered_at=now_ts,
-                description=f"{event.interval}【波动预警】{side_label}",
-                timeframe_combo=event.interval,
-            ))
             self.exhaustion_svc.on_push(event.symbol, side, now_ts, actual_topic, msg_id)

@@ -13,7 +13,6 @@ from ..domain.models import Side, TrackingWindow  # Side 也用于 on_push 类�
 from ..infra.store import AppState
 from ..infra.utils import ts_to_utc_str
 from ..infra.chart import _fetch_klines, _binance_to_df, _compute_ema, send_with_chart
-from ..adapters import dashboard_client
 
 if TYPE_CHECKING:
     from ..adapters.tg_client import TelegramClient
@@ -220,6 +219,8 @@ class ExhaustionService:
             chat_numeric = settings.TG_CHAT_ID.removeprefix('-100')
             link = f"https://t.me/c/{chat_numeric}/{window.reply_to_message_id}"
             msg = f"{msg}\n📎 {link}"
+        desc_parts = result.chart_title.split("  ", 1)
+        desc = desc_parts[1] if len(desc_parts) > 1 else result.chart_title
         await send_with_chart(
             tg=self.tg,
             msg=msg,
@@ -229,13 +230,11 @@ class ExhaustionService:
             max_iv="3m",
             chart_title=result.chart_title,
             trend_annotations_provider=lambda iv, sym=window.symbol: self.state.get_recent_trend_labels(sym, iv),
+            dashboard_push=[dict(
+                symbol=window.symbol,
+                direction="long" if window.side == Side.OVERSOLD else "short",
+                triggered_at=result.cross_ts,
+                description=desc,
+                timeframe_combo="3m",
+            )],
         )
-        desc_parts = result.chart_title.split("  ", 1)
-        desc = desc_parts[1] if len(desc_parts) > 1 else result.chart_title
-        asyncio.create_task(dashboard_client.push_signal(
-            symbol=window.symbol,
-            direction="long" if window.side == Side.OVERSOLD else "short",
-            triggered_at=result.cross_ts,
-            description=desc,
-            timeframe_combo="3m",
-        ))
