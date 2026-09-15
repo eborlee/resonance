@@ -466,6 +466,14 @@ class ResonanceService:
                 trend_annotations_provider=lambda iv, sym=symbol: self.state.get_recent_trend_labels(sym, iv),
             )
             logger.info("tv cross text routed to topic %s", settings.TG_TOPIC_PRICE)
+            import time as _time
+            asyncio.create_task(dashboard_client.push_signal(
+                symbol=symbol,
+                direction="neutral",
+                triggered_at=_time.time(),
+                description=f"价格穿越 {price_str}" if price_str else "价格穿越",
+                timeframe_combo="price",
+            ))
         except Exception:
             logger.error("send cross text failed", exc_info=True)
 
