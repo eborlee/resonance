@@ -73,6 +73,8 @@ class Ema21CrossEma200Rule(ExhaustionRule):
         return "ema21_cross_ema200_3m"
 
     async def check(self, window: TrackingWindow) -> Optional[ExhaustionResult]:
+        if window.phase != 1:
+            return None
         klines = await _fetch_klines(window.symbol, "3m", _KLINE_LIMIT)
         if not klines:
             logger.debug(f"[{self.name}] {window.symbol} 无 3m K线，跳过")
@@ -128,6 +130,79 @@ class Ema21CrossEma200Rule(ExhaustionRule):
                 f"3m EMA21 {cross_dir} EMA200",
             ]),
             chart_title=f"{window.symbol}  3m【{side_label}】EMA21{cross_dir}EMA200",
+        )
+
+
+# ─────────────────────────────────────────────────────────────
+# 二级规则：3m EMA21 穿越 EMA55（phase=2 窗口专用）
+# ─────────────────────────────────────────────────────────────
+
+class Ema21CrossEma55Rule(ExhaustionRule):
+    """
+    超买衰竭二级：3m EMA21 下穿 EMA55（一级下穿200之后）
+    超卖衰竭二级：3m EMA21 上穿 EMA55（一级上穿200之后）
+    """
+
+    @property
+    def name(self) -> str:
+        return "ema21_cross_ema55_3m"
+
+    async def check(self, window: TrackingWindow) -> Optional[ExhaustionResult]:
+        if window.phase != 2:
+            return None
+        klines = await _fetch_klines(window.symbol, "3m", _KLINE_LIMIT)
+        if not klines:
+            logger.debug(f"[{self.name}] {window.symbol} 无 3m K线，跳过")
+            return None
+
+        now_ms = time.time() * 1000
+        klines = [k for k in klines if k[6] < now_ms]
+        if len(klines) < 401:
+            logger.debug(f"[{self.name}] {window.symbol} 已收盘 K 线不足，跳过")
+            return None
+
+        df = _binance_to_df(klines)
+        closes = df["Close"].tolist()
+        open_times = [t.timestamp() for t in df.index]
+
+        ema21 = _compute_ema(closes, 21)
+        ema55 = _compute_ema(closes, 55)
+
+        for i in range(1, len(open_times)):
+            close_ts = open_times[i] + _3M_CANDLE_SEC
+            if close_ts < window.push_ts:
+                continue
+            if open_times[i] > window.push_ts + _WINDOW_SECONDS:
+                break
+
+            p21, p55 = ema21[i - 1], ema55[i - 1]
+            c21, c55 = ema21[i],     ema55[i]
+
+            if any(math.isnan(v) for v in (p21, p55, c21, c55)):
+                continue
+
+            if window.side == Side.OVERBOUGHT and p21 >= p55 and c21 < c55:
+                return self._make_result(window, close_ts, "下穿", "超买二级衰竭", "🔴")
+            if window.side == Side.OVERSOLD and p21 <= p55 and c21 > c55:
+                return self._make_result(window, close_ts, "上穿", "超卖二级衰竭", "🟢")
+
+        return None
+
+    @staticmethod
+    def _make_result(
+        window: TrackingWindow,
+        cross_ts: float,
+        cross_dir: str,
+        side_label: str,
+        dot: str,
+    ) -> ExhaustionResult:
+        return ExhaustionResult(
+            cross_ts=cross_ts,
+            message="\n".join([
+                f"{dot} {window.symbol} {side_label}",
+                f"3m EMA21 {cross_dir} EMA55",
+            ]),
+            chart_title=f"{window.symbol}  3m【{side_label}】EMA21{cross_dir}EMA55",
         )
 
 
@@ -208,9 +283,9 @@ class ExhaustionService:
                 continue
 
             if result is not None:
-                self.state.mark_tracking_alerted(window.symbol, window.side)
+                self.state.mark_tracking_alerted(window.symbol, window.side, window.phase)
                 logger.warning(
-                    f"[Exhaustion] {window.symbol} {window.side.value} "
+                    f"[Exhaustion] {window.symbol} {window.side.value} phase={window.phase} "
                     f"规则={rule.name} 穿越@{ts_to_utc_str(result.cross_ts)}"
                 )
                 await self._send_alert(window, result)
@@ -224,7 +299,7 @@ class ExhaustionService:
             msg = f"{msg}\n📎 {link}"
         desc_parts = result.chart_title.split("  ", 1)
         desc = desc_parts[1] if len(desc_parts) > 1 else result.chart_title
-        await send_with_chart(
+        entry_msg_id = await send_with_chart(
             tg=self.tg,
             msg=msg,
             chat_id=settings.TG_CHAT_ID,
@@ -241,3 +316,13 @@ class ExhaustionService:
                 timeframe_combo="3m",
             )],
         )
+        # 一级命中后，开启 phase=2 窗口继续追踪 EMA21 穿 EMA55
+        if window.phase == 1:
+            self.state.register_tracking_window(
+                symbol=window.symbol,
+                side=window.side,
+                push_ts=result.cross_ts,
+                topic_id=settings.TG_TOPIC_ENTRY,
+                reply_to_message_id=entry_msg_id,
+                phase=2,
+            )

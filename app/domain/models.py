@@ -126,6 +126,7 @@ class TrackingWindow:
     reply_to_message_id: Optional[int] = None  # 原推送消息 ID，用于 reply
     alerted: bool = False
     source: Optional[str] = None  # 产生此窗口的推送类型，如 "ema21"
+    phase: int = 1               # 1=一级（追踪EMA21穿EMA200），2=二级（追踪EMA21穿EMA55）
 
     def is_expired(self, now_ts: float) -> bool:
         return now_ts > self.push_ts + 2 * 3600

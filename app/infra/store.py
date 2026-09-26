@@ -114,8 +114,8 @@ class AppState:
         # 背离缓存：记录每个 (symbol, interval) 最近一次触发背离的时间（人可读字符串）
         self.divergence_cache: Dict[Tuple[str, str], str] = {}
 
-        # 衰竭追踪窗口：key=(symbol, side)，新推送覆盖旧窗口
-        self.tracking_windows: Dict[Tuple[str, Side], TrackingWindow] = {}
+        # 衰竭追踪窗口：key=(symbol, side, phase)，同 phase 新推送覆盖旧窗口
+        self.tracking_windows: Dict[Tuple[str, Side, int], TrackingWindow] = {}
 
         # 心跳追踪（仅 crypto）：key=(symbol, interval) → 最近一次收到通道外部心跳的事件时间戳
         self.last_heartbeat_ts: Dict[Tuple[str, str], float] = {}
@@ -371,16 +371,18 @@ class AppState:
         push_ts: float,
         topic_id: int,
         reply_to_message_id: Optional[int] = None,
+        phase: int = 1,
     ) -> None:
-        """注册或刷新追踪窗口。新推送直接覆盖，从头开始 2h 计时。"""
-        self.tracking_windows[(symbol, side)] = TrackingWindow(
+        """注册或刷新追踪窗口。同 phase 新推送直接覆盖，从头开始 2h 计时。"""
+        self.tracking_windows[(symbol, side, phase)] = TrackingWindow(
             symbol=symbol,
             side=side,
             push_ts=push_ts,
             topic_id=topic_id,
             reply_to_message_id=reply_to_message_id,
+            phase=phase,
         )
-        logger.info(f"[追踪] 注册窗口: {symbol} {side.value} push_ts={push_ts:.0f}")
+        logger.info(f"[追踪] 注册窗口: {symbol} {side.value} phase={phase} push_ts={push_ts:.0f}")
 
     def get_active_tracking_windows(self, now_ts: float) -> list[TrackingWindow]:
         """返回所有未过期且未推送衰竭信号的窗口。"""
@@ -389,11 +391,11 @@ class AppState:
             if not w.alerted and not w.is_expired(now_ts)
         ]
 
-    def mark_tracking_alerted(self, symbol: str, side: Side) -> None:
-        w = self.tracking_windows.get((symbol, side))
+    def mark_tracking_alerted(self, symbol: str, side: Side, phase: int = 1) -> None:
+        w = self.tracking_windows.get((symbol, side, phase))
         if w:
             w.alerted = True
-            logger.info(f"[追踪] 已标记衰竭: {symbol} {side.value}")
+            logger.info(f"[追踪] 已标记衰竭: {symbol} {side.value} phase={phase}")
 
     def is_zone_warm(self, symbol: str, interval: str, role: str, now_ts: float) -> bool:
         entry = self.zone_touch_cache.get((symbol, interval, role))

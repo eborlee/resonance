@@ -20,7 +20,7 @@ from .services.divergence_service import DivergenceService
 from .services.volatile_service import VolatileService
 from .services.trend_service import TrendService
 from .services.tg_command_handler import polling_loop
-from .services.exhaustion_service import ExhaustionService, Ema21CrossEma200Rule
+from .services.exhaustion_service import ExhaustionService, Ema21CrossEma200Rule, Ema21CrossEma55Rule
 from .services.market_briefing_service import MarketBriefingService
 from .services.obos_scan_service import ObosScanService
 from .services.daily_summary_service import DailySummaryService
@@ -80,6 +80,7 @@ else:
 
 exhaustion_svc = ExhaustionService(state=state, tg=tg)
 exhaustion_svc.register_rule(Ema21CrossEma200Rule())
+exhaustion_svc.register_rule(Ema21CrossEma55Rule())
 exhaustion_svc.add_skip_filter(
     lambda zone_iv=None, obos_iv=None, **_: zone_iv == "1h" and obos_iv == "15m"
 )
