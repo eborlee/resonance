@@ -161,6 +161,9 @@ class ExhaustionService:
         **ctx,
     ) -> None:
         """由各推送 service 在发送消息后调用，统一决策是否注册追踪窗口。"""
+        if topic_id == settings.TG_TOPIC_15MIN:
+            logger.debug(f"[Exhaustion] {symbol} {side.value} 15m频道信号，跳过entry追踪")
+            return
         for f in self._skip_filters:
             if f(**ctx):
                 logger.debug(f"[Exhaustion] {symbol} {side} 被 skip_filter 过滤，不追踪")
