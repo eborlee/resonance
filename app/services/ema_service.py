@@ -140,6 +140,10 @@ class EmaService:
                     triggered_at=now_ts,
                     description=f"{event.interval}【EMA200触及】{obos_iv}{'超卖' if side == Side.OVERSOLD else '超买'}",
                     timeframe_combo=event.interval,
+                    elements=[
+                        {"type": "ema_touch", "interval": event.interval, "period": 200, "role": event.role},
+                        {"type": "obos", "interval": obos_iv, "side": "oversold" if side == Side.OVERSOLD else "overbought", "level": "IN"},
+                    ],
                 )
                 for _, obos_iv, side, _ in active_matched
             ],
@@ -220,6 +224,11 @@ class EmaService:
                     triggered_at=now_ts,
                     description=f"{event.interval}【EMA55触及】1h+15m{side_label}",
                     timeframe_combo=event.interval,
+                    elements=[
+                        {"type": "ema_touch", "interval": event.interval, "period": 55, "role": event.role},
+                        {"type": "obos", "interval": "1h", "side": "oversold" if side == Side.OVERSOLD else "overbought", "level": "IN"},
+                        {"type": "obos", "interval": "15m", "side": "oversold" if side == Side.OVERSOLD else "overbought", "level": "IN"},
+                    ],
                 )],
             )
             self.exhaustion_svc.on_push(event.symbol, side, now_ts, topic_id, msg_id)
@@ -299,6 +308,10 @@ class EmaService:
                     triggered_at=now_ts,
                     description=f"{event.interval}【EMA21触及】{side_label} {align_label}",
                     timeframe_combo=event.interval,
+                    elements=[
+                        {"type": "ema_touch", "interval": event.interval, "period": 21, "role": event.role},
+                        {"type": "obos", "interval": event.interval, "side": "oversold" if side == Side.OVERSOLD else "overbought", "level": "IN"},
+                    ],
                 )],
             )
             self.exhaustion_svc.on_push(event.symbol, side, now_ts, actual_topic, msg_id)
@@ -323,6 +336,10 @@ class EmaService:
                     triggered_at=now_ts,
                     description=f"{event.interval}【EMA21触及】{align_label} | 15m{side_label}",
                     timeframe_combo=event.interval,
+                    elements=[
+                        {"type": "ema_touch", "interval": event.interval, "period": 21, "role": event.role},
+                        {"type": "obos", "interval": "15m", "side": "oversold" if side == Side.OVERSOLD else "overbought", "level": "IN"},
+                    ],
                 )],
             )
             self.exhaustion_svc.on_push(event.symbol, side, now_ts, settings.TG_TOPIC_15MIN, msg_id_15m)

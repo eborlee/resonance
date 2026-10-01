@@ -114,6 +114,9 @@ class DivergenceService:
                     triggered_at=event.ts,
                     description=f"{event.interval}【顶底背离】{'超卖' if s == Side.OVERSOLD else '超买'}",
                     timeframe_combo=event.interval,
+                    elements=[
+                        {"type": "divergence", "interval": event.interval, "side": "oversold" if s == Side.OVERSOLD else "overbought"},
+                    ],
                 )
                 for s in in_sides
             ],

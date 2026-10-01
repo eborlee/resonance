@@ -198,12 +198,19 @@ class ZoneService:
                 dashboard_push=[
                     dict(
                         symbol=event.symbol,
-                        direction="long" if side_i == Side.OVERSOLD else "short",
+                        direction="long" if _side == Side.OVERSOLD else "short",
                         triggered_at=now_ts,
-                        description=f"{event.interval}【关键区域】{obos_iv_i}{'超卖' if side_i == Side.OVERSOLD else '超买'}",
+                        description=f"{event.interval}【关键区域】{' '.join(_ivs)}{'超卖' if _side == Side.OVERSOLD else '超买'}",
                         timeframe_combo=event.interval,
+                        elements=[
+                            {"type": "zone", "interval": event.interval, "role": event.role},
+                            *[{"type": "obos", "interval": iv, "side": "oversold" if _side == Side.OVERSOLD else "overbought", "level": "IN"} for iv in _ivs],
+                        ],
                     )
-                    for _, obos_iv_i, side_i, _ in items
+                    for _side, _ivs in {
+                        s: [iv for _, iv, si, _ in items if si == s]
+                        for s in dict.fromkeys(si for _, _, si, _ in items)
+                    }.items()
                 ],
             )
             # 取最大 obos_iv 对应的 side 注册追踪
@@ -334,6 +341,10 @@ class ZoneService:
                                 triggered_at=now_ts,
                                 description=f"{zone_iv}【区域合成】{obos_iv}{side_label}",
                                 timeframe_combo=zone_iv,
+                                elements=[
+                                    {"type": "zone", "interval": zone_iv, "role": role},
+                                    {"type": "obos", "interval": obos_iv, "side": "oversold" if side == Side.OVERSOLD else "overbought", "level": "IN"},
+                                ],
                             )],
                         )
                         self.exhaustion_svc.on_push(

@@ -314,6 +314,9 @@ class ExhaustionService:
                 triggered_at=result.cross_ts,
                 description=desc,
                 timeframe_combo="3m",
+                elements=[
+                    {"type": "ema_cross", "interval": "3m", "fast": 21, "slow": 200 if window.phase == 1 else 55, "direction": "up" if window.side == Side.OVERSOLD else "down"},
+                ],
             )],
         )
         # 一级命中后，开启 phase=2 窗口继续追踪 EMA21 穿 EMA55

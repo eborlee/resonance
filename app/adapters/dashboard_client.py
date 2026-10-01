@@ -25,6 +25,7 @@ async def push_signal(
     score_total: Optional[int] = None,
     raw_payload: Optional[dict] = None,
     image_bytes: Optional[bytes] = None,
+    elements: Optional[list] = None,
 ) -> bool:
     """
     旁路归档到 resonance_dashboard。火忘模式：失败只记 warning，绝不抛异常。
@@ -49,6 +50,8 @@ async def push_signal(
         payload["score_total"] = score_total
     if raw_payload is not None:
         payload["raw_payload"] = raw_payload
+    if elements is not None:
+        payload["elements"] = elements
 
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:

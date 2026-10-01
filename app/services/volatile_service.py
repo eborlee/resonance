@@ -118,6 +118,10 @@ class VolatileService:
                     triggered_at=now_ts,
                     description=f"{event.interval}【波动预警】{side_label}",
                     timeframe_combo=event.interval,
+                    elements=[
+                        {"type": "volatile", "interval": event.interval, "side": "oversold" if side == Side.OVERSOLD else "overbought"},
+                        *[{"type": "obos", "interval": iv, "side": "oversold" if side == Side.OVERSOLD else "overbought", "level": st.value} for iv, st in matched],
+                    ],
                 )],
             )
             self.exhaustion_svc.on_push(event.symbol, side, now_ts, actual_topic, msg_id)

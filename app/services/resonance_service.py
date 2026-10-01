@@ -388,6 +388,9 @@ class ResonanceService:
                                 description=f"{max_iv}【共振】{obos_str}",
                                 timeframe_combo="+".join(canon),
                                 score_total=len(canon),
+                                elements=[
+                                    {"type": "resonance", "intervals": list(canon), "side": "oversold" if side == Side.OVERSOLD else "overbought"},
+                                ],
                             )],
                         )
                     )
@@ -470,6 +473,9 @@ class ResonanceService:
                     triggered_at=_time.time(),
                     description=f"价格穿越 {price_str}" if price_str else "价格穿越",
                     timeframe_combo="price",
+                    elements=[
+                        {"type": "price_cross", "price": price},
+                    ],
                 )],
             )
             logger.info("tv cross text routed to topic %s", settings.TG_TOPIC_PRICE)

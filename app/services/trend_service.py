@@ -196,6 +196,12 @@ class TrendService:
                         triggered_at=now_ts,
                         description=f"{event.interval} {label}{suffix}",
                         timeframe_combo=event.interval,
+                        elements=[
+                            {"type": "trend", "interval": event.interval, "label": label},
+                            *[{"type": "zone", "interval": iv, "role": r} for r, _, _, iv, _ in zone_matches],
+                            *[{"type": "ema_touch", "interval": event.interval, "period": p, "role": r} for p, r, _, _, _ in ema_matches],
+                            *[{"type": "obos", "interval": obos_iv, "side": "oversold" if side == Side.OVERSOLD else "overbought", "level": obos_state.value} for obos_iv, obos_state in obos_matches],
+                        ],
                     )],
                 )
             except Exception:
