@@ -313,7 +313,7 @@ def _draw_chart(
         style="classic",
         title=f"\n{title_str}" if show_title else "",
         addplot=add_plots,
-        figsize=(14, 5),
+        figsize=(15, 6),
         returnfig=True,
         warn_too_much_data=9999,
     )
@@ -326,7 +326,7 @@ def _draw_chart(
     for txt in fig.texts:
         if _cjk_font_prop is not None:
             txt.set_fontproperties(_cjk_font_prop)
-        txt.set_fontsize(32)
+        txt.set_fontsize(24)
         txt.set_color(title_color)
 
     # 图例（mplfinance returnfig 模式下需手动触发）
