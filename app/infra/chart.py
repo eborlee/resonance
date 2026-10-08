@@ -277,6 +277,7 @@ def _draw_chart(
     trend_annotation_errors: Optional[List[str]] = None,
     title_color: Optional[str] = None,
     ylabel_text: Optional[str] = None,
+    show_title: bool = True,
 ) -> bytes:
     import mplfinance as mpf
     import matplotlib.pyplot as plt
@@ -310,7 +311,7 @@ def _draw_chart(
         df,
         type="candle",
         style="classic",
-        title=f"\n{title_str}",
+        title=f"\n{title_str}" if show_title else "",
         addplot=add_plots,
         figsize=(14, 5),
         returnfig=True,
@@ -322,11 +323,11 @@ def _draw_chart(
     # 直接将 CJK 字体注入 suptitle Text 对象，绕过名称查找回落问题
     if title_color is None:
         title_color = "#ef5350" if "超买" in title_str else "#26a69a" if "超卖" in title_str else "#000000"
-    if _cjk_font_prop is not None:
-        for txt in fig.texts:
+    for txt in fig.texts:
+        if _cjk_font_prop is not None:
             txt.set_fontproperties(_cjk_font_prop)
-            txt.set_fontsize(21)
-            txt.set_color(title_color)
+        txt.set_fontsize(32)
+        txt.set_color(title_color)
 
     # 图例（mplfinance returnfig 模式下需手动触发）
     handles, labels = [], []
@@ -430,12 +431,13 @@ def _vstack_pngs(chart_bytes_list: list[bytes]) -> bytes:
     from PIL import Image
     images = [Image.open(io.BytesIO(b)).convert("RGB") for b in chart_bytes_list]
     max_w = max(img.width for img in images)
-    total_h = sum(img.height for img in images)
+    gap = 6  # 子图之间只留一条细缝
+    total_h = sum(img.height for img in images) + gap * (len(images) - 1)
     combined = Image.new("RGB", (max_w, total_h), (255, 255, 255))
     y = 0
     for img in images:
         combined.paste(img, (0, y))
-        y += img.height
+        y += img.height + gap
     buf = io.BytesIO()
     combined.save(buf, format="PNG")
     buf.seek(0)
@@ -455,6 +457,7 @@ async def generate_chart(
     trend_annotation_errors: Optional[List[str]] = None,
     title_color: Optional[str] = None,
     ylabel_text: Optional[str] = None,
+    show_title: bool = True,
 ) -> Optional[bytes]:
     """
     生成带EMA21/55/100/200的K线图（PNG字节）。
@@ -490,7 +493,7 @@ async def generate_chart(
         return None
 
     try:
-        return _draw_chart(symbol, label, df, display_n=display_n, zone_bot=zone_bot, zone_top=zone_top, zone_role=zone_role, price_level=price_level, chart_title=chart_title, price_label=price_label, trend_annotations=trend_annotations, trend_annotation_errors=trend_annotation_errors, title_color=title_color, ylabel_text=ylabel_text)
+        return _draw_chart(symbol, label, df, display_n=display_n, zone_bot=zone_bot, zone_top=zone_top, zone_role=zone_role, price_level=price_level, chart_title=chart_title, price_label=price_label, trend_annotations=trend_annotations, trend_annotation_errors=trend_annotation_errors, title_color=title_color, ylabel_text=ylabel_text, show_title=show_title)
     except Exception:
         logger.warning(f"[Chart] 绘图失败: {symbol}/{max_iv}", exc_info=True)
         return None
@@ -563,6 +566,7 @@ async def generate_multi_chart(
             trend_annotation_errors=trend_annotation_errors,
             title_color=title_color,
             ylabel_text=iv,
+            show_title=(i == 0),  # 只有顶部子图显示标题
         )
         for i, iv in enumerate(intervals)
     ]
