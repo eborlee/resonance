@@ -286,19 +286,19 @@ def _draw_chart(
     closes = df["Close"].tolist()
 
     ema_configs = [
-        (21,  "#F5C518"),  # 亮黄
-        (55,  "#D4920A"),  # 深金黄
-        (100, "#A0621A"),  # 土黄褐
-        (200, "#6B3A10"),  # 深棕
+        (21,  "#F7525F", 1.3),  # 红色（重点）
+        (55,  "#B4B4B4", 1.3),  # 浅灰
+        (100, "#B4B4B4", 1.3),  # 浅灰
+        (200, "#6E6E6E", 1.6),  # 深灰（更粗）
     ]
     add_plots = []
-    for period, color in ema_configs:
+    for period, color, width in ema_configs:
         vals = _compute_ema(closes, period)
         # 只取最后 display_n 个值，与 df 对齐
         if display_n is not None:
             vals = vals[-display_n:]
         if any(not math.isnan(v) for v in vals):
-            add_plots.append(mpf.make_addplot(vals, color=color, width=1.3, alpha=0.7, label=f"EMA{period}"))
+            add_plots.append(mpf.make_addplot(vals, color=color, width=width, alpha=0.8, label=f"EMA{period}"))
 
     # 只显示最后 display_n 根 K线
     if display_n is not None:
