@@ -322,15 +322,11 @@ def _draw_chart(
     # 直接将 CJK 字体注入 suptitle Text 对象，绕过名称查找回落问题
     if title_color is None:
         title_color = "#ef5350" if "超买" in title_str else "#26a69a" if "超卖" in title_str else "#000000"
-    pos = ax.get_position()
-    for txt in fig.texts:
-        if _cjk_font_prop is not None:
+    if _cjk_font_prop is not None:
+        for txt in fig.texts:
             txt.set_fontproperties(_cjk_font_prop)
-        txt.set_fontsize(28)
-        txt.set_fontweight("bold")
-        txt.set_color(title_color)
-        txt.set_horizontalalignment("center")
-        txt.set_x((pos.x0 + pos.x1) / 2)  # 相对绘图区居中
+            txt.set_fontsize(21)
+            txt.set_color(title_color)
 
     # 图例（mplfinance returnfig 模式下需手动触发）
     handles, labels = [], []
