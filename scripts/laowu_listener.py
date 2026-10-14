@@ -28,15 +28,30 @@ logger = logging.getLogger(__name__)
 
 API_ID = int(os.environ["TG_API_ID"])
 API_HASH = os.environ["TG_API_HASH"]
-LAOWU_BOT_ID = int(os.environ["LAOWU_BOT_ID"])
+# LAOWU_BOT_ID 未配置时进入"探测模式"：打印所有收到的消息发送者 ID，用于找到 bot ID
+_RAW_BOT_ID = os.environ.get("LAOWU_BOT_ID", "")
+LAOWU_BOT_ID: int | None = int(_RAW_BOT_ID) if _RAW_BOT_ID else None
 WEBHOOK_URL = os.environ.get("LAOWU_WEBHOOK_URL", "http://localhost:80/webhook/laowu")
 WEBHOOK_TOKEN = os.environ.get("LAOWU_WEBHOOK_TOKEN", "")
 
 client = TelegramClient("laowu_session", API_ID, API_HASH)
 
 
-@client.on(events.NewMessage(from_users=LAOWU_BOT_ID))
+@client.on(events.NewMessage())
+async def on_any_message(event):
+    """探测模式：LAOWU_BOT_ID 未配置时打印所有消息发送者，用于确认 bot ID。"""
+    if LAOWU_BOT_ID is not None:
+        return
+    sender = await event.get_sender()
+    sender_id = sender.id if sender else event.sender_id
+    text_preview = (event.message.text or "")[:40]
+    logger.info(f"[探测] sender_id={sender_id}  text={text_preview!r}")
+
+
+@client.on(events.NewMessage())
 async def on_message(event):
+    if LAOWU_BOT_ID is None or event.sender_id != LAOWU_BOT_ID:
+        return
     text = event.message.text or ""
     if not text:
         return
@@ -54,7 +69,10 @@ async def on_message(event):
 
 
 async def main():
-    logger.info(f"老五信号监听器启动，监听 bot_id={LAOWU_BOT_ID}")
+    if LAOWU_BOT_ID is None:
+        logger.warning("LAOWU_BOT_ID 未配置，进入探测模式：将打印所有收到消息的发送者 ID")
+    else:
+        logger.info(f"老五信号监听器启动，监听 bot_id={LAOWU_BOT_ID}")
     await client.start()
     logger.info("Telethon 已登录")
     await client.run_until_disconnected()
