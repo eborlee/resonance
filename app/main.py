@@ -21,6 +21,9 @@ from .services.volatile_service import VolatileService
 from .services.trend_service import TrendService
 from .services.tg_command_handler import polling_loop
 from .services.exhaustion_service import ExhaustionService, Ema21CrossEma200Rule, Ema21CrossEma55Rule
+from .services.laowu_service import LaoWuService
+from .adapters.laowu_parser import parse_laowu_message
+from .infra.chart import register_focus_state
 from .services.market_briefing_service import MarketBriefingService
 from .services.obos_scan_service import ObosScanService
 from .services.daily_summary_service import DailySummaryService
@@ -94,6 +97,9 @@ ema_svc = EmaService(state=state, tg=tg, exhaustion_svc=exhaustion_svc)
 divergence_svc = DivergenceService(state=state, tg=tg, exhaustion_svc=exhaustion_svc)
 volatile_svc = VolatileService(state=state, tg=tg, exhaustion_svc=exhaustion_svc)
 trend_svc = TrendService(state=state, tg=tg)
+laowu_svc = LaoWuService(state=state, tg=tg)
+
+register_focus_state(state)
 
 
 
@@ -207,6 +213,30 @@ async def tradingview_webhook(req: Request):
         # logger.info("解析失败json")
         await svc.handle_raw_text_fallback(req, err=e)
         return {"ok": True, "fallback": True}
+
+
+@app.post("/webhook/laowu")
+async def laowu_webhook(req: Request):
+    try:
+        payload = await req.json()
+    except Exception:
+        logger.error("laowu webhook JSON 解析失败", exc_info=True)
+        return {"ok": True, "fallback": True}
+
+    text = payload.get("text", "")
+    ts = payload.get("ts")
+    if not text:
+        return {"ok": True, "ignored": True}
+
+    try:
+        signal = parse_laowu_message(text, ts=ts)
+        if signal is None:
+            logger.info(f"[老五] 无法解析消息，跳过: {text[:60]}")
+            return {"ok": True, "ignored": True}
+        await laowu_svc.handle_signal(signal)
+    except Exception:
+        logger.error("laowu_service 处理异常", exc_info=True)
+    return {"ok": True}
 
 
 @app.post("/webhook/trend")

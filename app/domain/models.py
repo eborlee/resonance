@@ -117,6 +117,19 @@ class TrendEvent:
     labels: Tuple[str, ...]  # 本次 K 线收盘触发的标签名（可能同时触发多个）
 
 
+@dataclass(frozen=True)
+class LaoWuSignal:
+    symbol: str
+    system: str            # "决策层" or "分析层"
+    direction: str         # "上涨机会" or "下跌机会"
+    level: str             # "4级" or "A级"
+    ts: float
+    price: Optional[float] = None
+    interval: Optional[str] = None
+    description: Optional[str] = None
+    suggestion: Optional[str] = None
+
+
 @dataclass
 class TrackingWindow:
     symbol: str

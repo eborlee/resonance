@@ -129,7 +129,9 @@ COMMANDS = """/cache <symbol>      — 各周期 IN/WARM/OUT 状态
 /universe            — 所有监控品种
 /stats               — 今日推送次数统计
 /analysis on|off     — 开启/关闭4h图表AI分析
-/briefing on|off|now — 开启/关闭/立即推送市场简报"""
+/briefing on|off|now — 开启/关闭/立即推送市场简报
+/focus [symbols...]  — 设置/查看今日重点关注标的
+/focus_clear         — 清空重点关注列表"""
 
 
 def _handle_cache(state: AppState, symbol: str, now_ts: float) -> str:
@@ -428,6 +430,20 @@ def _handle_scan(state: AppState, interval: str | None) -> str:
     return "\n".join(lines)
 
 
+def _handle_focus(state: AppState, symbols: list[str]) -> str:
+    if not symbols:
+        focus = state.get_focus_symbols()
+        if not focus:
+            return "🎯 当前无重点关注标的\n用法: /focus BTCUSDT ETHUSDT ..."
+        return f"🎯 当前重点关注（{len(focus)}个）:\n" + "\n".join(f"  {s}" for s in focus)
+
+    state.set_focus_symbols(symbols)
+    return (
+        f"✅ 已设置 {len(symbols)} 个重点关注标的（持续有效直到下次覆盖）:\n"
+        + "\n".join(f"  {s}" for s in symbols)
+    )
+
+
 def _handle_universe() -> str:
     uni = get_universe()
     lines = [f"🌐 监控品种（{len(uni)}个）"]
@@ -595,6 +611,22 @@ async def _process_update(update: dict, state: AppState, tg: TelegramClient, own
             await tg.send_message(chat_id=chat_id, text="🤖 指令菜单", reply_markup=_main_menu_keyboard())
         except Exception:
             logger.error("发送失败", exc_info=True)
+        return
+
+    # /focus 单独处理（支持多个 symbol 参数）
+    if text.strip().lower().split("@")[0].split()[0] in ("/focus", "/focus_clear"):
+        parts = text.strip().split()
+        cmd_name = parts[0].lower().split("@")[0]
+        if cmd_name == "/focus":
+            symbols = [s.upper() for s in parts[1:] if s]
+            reply = _handle_focus(state, symbols)
+        else:  # /focus_clear
+            state.clear_focus_symbols()
+            reply = "✅ 重点关注列表已清空"
+        try:
+            await tg.send_message(chat_id=chat_id, text=reply)
+        except Exception:
+            logger.error("命令回复发送失败", exc_info=True)
         return
 
     cmd, arg = _parse_command(text)

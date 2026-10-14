@@ -28,6 +28,14 @@ _analysis_svc: Optional["ChartAnalysisService"] = None
 _analysis_enabled: bool = False
 _msg_stats: Optional["MessageStats"] = None
 
+# 重点关注重定向
+_focus_state: Optional[Any] = None  # AppState，避免循环导入用 Any
+
+
+def register_focus_state(state: Any) -> None:
+    global _focus_state
+    _focus_state = state
+
 
 def register_analysis(svc: "ChartAnalysisService") -> None:
     global _analysis_svc
@@ -719,4 +727,37 @@ async def send_with_chart(
             for entry in dashboard_push:
                 asyncio.create_task(_dashboard_client.push_signal(**entry, image_bytes=photo))
 
+        # 重点关注重定向：symbol 在 focus 列表且当前 topic 不是 focus topic
+        if (
+            _focus_state is not None
+            and settings.TG_TOPIC_FOCUS != 0
+            and topic_id != settings.TG_TOPIC_FOCUS
+            and _focus_state.is_in_focus(symbol)
+        ):
+            asyncio.create_task(_send_to_focus(tg=tg, msg=msg, chat_id=chat_id, photo=photo))
+
     return msg_id
+
+
+async def _send_to_focus(
+    tg: "TelegramClient",
+    msg: str,
+    chat_id: str,
+    photo: Optional[bytes],
+) -> None:
+    try:
+        focus_msg = f"🎯【重点关注】\n{msg}"
+        lock = _topic_locks.setdefault(settings.TG_TOPIC_FOCUS, asyncio.Lock())
+        async with lock:
+            if photo is not None:
+                await tg.send_photo(
+                    chat_id=chat_id, photo=photo, caption=focus_msg,
+                    message_thread_id=settings.TG_TOPIC_FOCUS,
+                )
+            else:
+                await tg.send_message(
+                    chat_id=chat_id, text=focus_msg,
+                    message_thread_id=settings.TG_TOPIC_FOCUS,
+                )
+    except Exception:
+        logger.warning("[Focus重定向] 推送失败", exc_info=True)

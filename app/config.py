@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     TG_TOPIC_SUMMARY: int
     TG_TOPIC_ENTRY: int
     TG_TOPIC_BRIEF: int = 17529  # 市场简报 topic
+    TG_TOPIC_FOCUS: int = 0     # 重点关注 topic
+
+    # 老五信号接入（Telethon）
+    LAOWU_BOT_ID: int = 0       # 老五 bot 的 Telegram user_id
+    TG_API_ID: int = 0           # Telegram user API ID（Telethon 用）
+    TG_API_HASH: str = ""        # Telegram user API Hash（Telethon 用）
 
     # Dashboard 归档
     DASHBOARD_PUSH_URL: str = ""

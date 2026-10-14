@@ -122,6 +122,9 @@ class AppState:
         # 调度器去重：记录每个 (symbol, interval) 最近一次已处理的 bar close 时间戳
         self.last_checked_bar: Dict[Tuple[str, str], float] = {}
 
+        # 重点关注标的：持续有效直到下次 /focus 覆盖
+        self.focus_symbols: set[str] = set()
+
     # =========================================================
     # 更新某个周期的状态，同时记录“是否刚离开 IN”
     # =========================================================
@@ -406,6 +409,23 @@ class AppState:
         if candle_sec is None:
             return False
         return (now_ts - touch_ts) < 2 * candle_sec
+
+    # =========================================================
+    # 重点关注标的管理
+    # =========================================================
+    def set_focus_symbols(self, symbols: list[str]) -> None:
+        self.focus_symbols = {s.upper() for s in symbols}
+        logger.info(f"[重点关注] 已设置 {len(symbols)} 个标的")
+
+    def is_in_focus(self, symbol: str, now_ts: Optional[float] = None) -> bool:
+        return symbol.upper() in self.focus_symbols
+
+    def get_focus_symbols(self, now_ts: Optional[float] = None) -> list[str]:
+        return sorted(self.focus_symbols)
+
+    def clear_focus_symbols(self) -> None:
+        self.focus_symbols.clear()
+        logger.info("[重点关注] 已清空")
 
     # =========================================================
     # 心跳追踪（crypto 专用）
