@@ -23,6 +23,29 @@ services:
     networks:
       - appnet
 
+  # 老五 bot 监听器：Telethon 以用户账号监听老五 bot，转发到 resonance /webhook/laowu
+  # 首次需交互登录：docker compose run --rm laowu-listener   （登录成功后 Ctrl+C）
+  # 之后：docker compose up -d laowu-listener
+  laowu-listener:
+    build: .
+    container_name: laowu-listener
+    restart: unless-stopped
+    env_file:
+      - .env   # TG_API_ID / TG_API_HASH / LAOWU_BOT_ID
+    environment:
+      LAOWU_WEBHOOK_URL: http://resonance:8000/webhook/laowu
+    working_dir: /app/session   # Telethon session 文件落在这里
+    volumes:
+      - ./scripts:/app/scripts:ro
+      - ./data/laowu_session:/app/session   # ⭐ session 持久化（data/ 已 gitignore）
+    command: python /app/scripts/laowu_listener.py
+    stdin_open: true
+    tty: true
+    depends_on:
+      - resonance
+    networks:
+      - appnet
+
   nginx:
     image: nginx:latest
     container_name: nginx-proxy

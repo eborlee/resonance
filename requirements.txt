@@ -4,6 +4,7 @@ matplotlib>=3.7.0
 Pillow>=9.0.0
 yfinance>=0.2.40
 mplfinance
+telethon>=1.36.0
 pandas>=2.0.0
 annotated-doc==0.0.4
 annotated-types==0.7.0
