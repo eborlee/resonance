@@ -125,6 +125,9 @@ class AppState:
         # 重点关注标的：持续有效直到下次 /focus 覆盖
         self.focus_symbols: set[str] = set()
 
+        # 老五每日山寨关注：base 币名（不含 USDT）→ (4H 一句话, 1H 一句话)，持续有效直到下次 /plan 覆盖
+        self.alt_plan: Dict[str, Tuple[str, str]] = {}
+
     # =========================================================
     # 更新某个周期的状态，同时记录“是否刚离开 IN”
     # =========================================================
@@ -426,6 +429,24 @@ class AppState:
     def clear_focus_symbols(self) -> None:
         self.focus_symbols.clear()
         logger.info("[重点关注] 已清空")
+
+    # =========================================================
+    # 老五每日山寨关注（图表标题附加推荐原因）
+    # =========================================================
+    @staticmethod
+    def _base_symbol(symbol: str) -> str:
+        s = symbol.upper()
+        for suffix in ("USDT", "USDC", "USD"):
+            if s.endswith(suffix) and len(s) > len(suffix):
+                return s[: -len(suffix)]
+        return s
+
+    def set_alt_plan(self, plan: Dict[str, Tuple[str, str]]) -> None:
+        self.alt_plan = {self._base_symbol(k): v for k, v in plan.items()}
+        logger.info(f"[山寨关注] 已设置 {len(self.alt_plan)} 个标的")
+
+    def get_alt_plan(self, symbol: str) -> Optional[Tuple[str, str]]:
+        return self.alt_plan.get(self._base_symbol(symbol))
 
     # =========================================================
     # 心跳追踪（crypto 专用）

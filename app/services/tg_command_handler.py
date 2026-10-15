@@ -14,6 +14,7 @@ from ..infra.stats import MessageStats
 from ..infra.chart import set_analysis_enabled, is_analysis_enabled
 from ..services.market_briefing_service import set_briefing_enabled, is_briefing_enabled, MarketBriefingService
 from ..adapters.tg_client import TelegramClient
+from ..adapters.notion_plan import fetch_alt_plan, NotionPlanError
 from ..infra.utils import ts_to_utc_str
 
 logger = logging.getLogger(__name__)
@@ -131,7 +132,9 @@ COMMANDS = """/cache <symbol>      — 各周期 IN/WARM/OUT 状态
 /analysis on|off     — 开启/关闭4h图表AI分析
 /briefing on|off|now — 开启/关闭/立即推送市场简报
 /focus [symbols...]  — 设置/查看今日重点关注标的
-/focus_clear         — 清空重点关注列表"""
+/focus_clear         — 清空重点关注列表
+/plan <notion链接>   — 解析老五每日山寨关注，图表标题附加推荐原因
+/plan                — 查看当前山寨关注"""
 
 
 def _handle_cache(state: AppState, symbol: str, now_ts: float) -> str:
@@ -444,6 +447,34 @@ def _handle_focus(state: AppState, symbols: list[str]) -> str:
     )
 
 
+def _format_alt_plan(state: AppState) -> str:
+    return "\n".join(
+        f"  {sym}\n    4H: {r4 or '-'}\n    1H: {r1 or '-'}"
+        for sym, (r4, r1) in sorted(state.alt_plan.items())
+    )
+
+
+async def _handle_plan(state: AppState, url: str | None) -> str:
+    if not url:
+        if not state.alt_plan:
+            return "📌 当前无山寨关注\n用法: /plan <老五 Notion 链接>"
+        return f"📌 当前山寨关注（{len(state.alt_plan)}个）:\n" + _format_alt_plan(state)
+
+    try:
+        plan = await fetch_alt_plan(url)
+    except NotionPlanError as e:
+        return f"❌ 解析失败: {e}"
+    except Exception:
+        logger.error("[山寨关注] 抓取失败", exc_info=True)
+        return "❌ 抓取失败（网络错误或页面结构变化），详见日志"
+
+    state.set_alt_plan(plan)
+    return (
+        f"✅ 已设置 {len(plan)} 个山寨关注（持续有效直到下次 /plan 覆盖）:\n"
+        + _format_alt_plan(state)
+    )
+
+
 def _handle_universe() -> str:
     uni = get_universe()
     lines = [f"🌐 监控品种（{len(uni)}个）"]
@@ -611,6 +642,16 @@ async def _process_update(update: dict, state: AppState, tg: TelegramClient, own
             await tg.send_message(chat_id=chat_id, text="🤖 指令菜单", reply_markup=_main_menu_keyboard())
         except Exception:
             logger.error("发送失败", exc_info=True)
+        return
+
+    # /plan 单独处理（参数是 URL，不能被 _parse_command 转成大写）
+    if text.strip().lower().split("@")[0].split()[0] == "/plan":
+        parts = text.strip().split()
+        reply = await _handle_plan(state, parts[1] if len(parts) > 1 else None)
+        try:
+            await tg.send_message(chat_id=chat_id, text=reply)
+        except Exception:
+            logger.error("命令回复发送失败", exc_info=True)
         return
 
     # /focus 单独处理（支持多个 symbol 参数）

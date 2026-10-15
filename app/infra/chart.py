@@ -286,6 +286,7 @@ def _draw_chart(
     title_color: Optional[str] = None,
     ylabel_text: Optional[str] = None,
     show_title: bool = True,
+    subtitle: Optional[str] = None,
 ) -> bytes:
     import mplfinance as mpf
     import matplotlib.pyplot as plt
@@ -336,6 +337,22 @@ def _draw_chart(
             txt.set_fontproperties(_cjk_font_prop)
         txt.set_fontsize(24)
         txt.set_color(title_color)
+
+    # 副标题（老五推荐原因）：紧贴图表上方，主标题相应上移避免重叠
+    if subtitle and show_title:
+        sub_lines = subtitle.count("\n") + 1
+        sub_kwargs = {"fontproperties": _cjk_font_prop} if _cjk_font_prop is not None else {}
+        sub_size = 16
+        ax.text(
+            0.5, 1.01, subtitle, transform=ax.transAxes,
+            fontsize=sub_size, color=title_color, ha="center", va="bottom",
+            linespacing=1.3, **sub_kwargs,
+        )
+        # 每行约占 sub_size*1.3pt；figsize 高 5in
+        shift = sub_lines * sub_size * 1.3 / 72 / 5
+        for txt in fig.texts:
+            x, y = txt.get_position()
+            txt.set_position((x, y + shift))
 
     # 图例（mplfinance returnfig 模式下需手动触发）
     handles, labels = [], []
@@ -466,6 +483,7 @@ async def generate_chart(
     title_color: Optional[str] = None,
     ylabel_text: Optional[str] = None,
     show_title: bool = True,
+    subtitle: Optional[str] = None,
 ) -> Optional[bytes]:
     """
     生成带EMA21/55/100/200的K线图（PNG字节）。
@@ -501,7 +519,7 @@ async def generate_chart(
         return None
 
     try:
-        return _draw_chart(symbol, label, df, display_n=display_n, zone_bot=zone_bot, zone_top=zone_top, zone_role=zone_role, price_level=price_level, chart_title=chart_title, price_label=price_label, trend_annotations=trend_annotations, trend_annotation_errors=trend_annotation_errors, title_color=title_color, ylabel_text=ylabel_text, show_title=show_title)
+        return _draw_chart(symbol, label, df, display_n=display_n, zone_bot=zone_bot, zone_top=zone_top, zone_role=zone_role, price_level=price_level, chart_title=chart_title, price_label=price_label, trend_annotations=trend_annotations, trend_annotation_errors=trend_annotation_errors, title_color=title_color, ylabel_text=ylabel_text, show_title=show_title, subtitle=subtitle)
     except Exception:
         logger.warning(f"[Chart] 绘图失败: {symbol}/{max_iv}", exc_info=True)
         return None
@@ -559,6 +577,15 @@ async def generate_multi_chart(
     from zoneinfo import ZoneInfo
     et_str = datetime.now(tz=ZoneInfo("America/New_York")).strftime("%m/%d %H:%M ET")
 
+    # 颜色按基础标题判定，避免推荐原因里的"超买/超卖"字样改变标题颜色
+    base_title = chart_title if chart_title else symbol
+    if title_color is None:
+        title_color = "#ef5350" if "超买" in base_title else "#26a69a" if "超卖" in base_title else "#000000"
+
+    # 老五每日山寨关注：标题下方追加 4H / 1H 推荐原因（老五原文已自带 "4H"/"1H" 前缀）
+    plan = _focus_state.get_alt_plan(symbol) if _focus_state is not None else None
+    subtitle = "\n".join(s for s in plan if s) if plan else ""
+
     def _title(is_top: bool) -> str:
         base = chart_title if chart_title else symbol
         return f"{base}  {et_str}" if is_top else base
@@ -575,6 +602,7 @@ async def generate_multi_chart(
             title_color=title_color,
             ylabel_text=iv,
             show_title=(i == 0),  # 只有顶部子图显示标题
+            subtitle=subtitle if i == 0 else None,
         )
         for i, iv in enumerate(intervals)
     ]
