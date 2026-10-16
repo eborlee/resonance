@@ -658,6 +658,19 @@ async def send_with_chart(
     每张子图各自调用一次，缓存为空时返回空列表，该子图不画标注。
     单条标注绘制失败只跳过该标注，K线图本身照常生成；失败信息会追加进推送文字里。
     """
+    # 重点关注重定向：symbol 在 focus 列表且原 topic 不是 focus topic 时，
+    # 只发到重点关注话题，不再发原话题，避免同一条消息重复推送。
+    orig_topic_id = topic_id
+    if (
+        _focus_state is not None
+        and settings.TG_TOPIC_FOCUS != 0
+        and topic_id != settings.TG_TOPIC_FOCUS
+        and _focus_state.is_in_focus(symbol)
+    ):
+        topic_id = settings.TG_TOPIC_FOCUS
+        msg = f"🎯【重点关注】\n{msg}"
+        reply_to_message_id = None  # 被引用的消息在原话题里，跨话题无法回复
+
     lock = _topic_locks.setdefault(topic_id, asyncio.Lock())
     async with lock:
         photo: Optional[bytes] = None
@@ -715,7 +728,7 @@ async def send_with_chart(
 
         if (
             photo is not None
-            and topic_id == settings.TG_TOPIC_4H
+            and orig_topic_id == settings.TG_TOPIC_4H
             and _analysis_svc is not None
             and _analysis_enabled
         ):
@@ -755,37 +768,4 @@ async def send_with_chart(
             for entry in dashboard_push:
                 asyncio.create_task(_dashboard_client.push_signal(**entry, image_bytes=photo))
 
-        # 重点关注重定向：symbol 在 focus 列表且当前 topic 不是 focus topic
-        if (
-            _focus_state is not None
-            and settings.TG_TOPIC_FOCUS != 0
-            and topic_id != settings.TG_TOPIC_FOCUS
-            and _focus_state.is_in_focus(symbol)
-        ):
-            asyncio.create_task(_send_to_focus(tg=tg, msg=msg, chat_id=chat_id, photo=photo))
-
     return msg_id
-
-
-async def _send_to_focus(
-    tg: "TelegramClient",
-    msg: str,
-    chat_id: str,
-    photo: Optional[bytes],
-) -> None:
-    try:
-        focus_msg = f"🎯【重点关注】\n{msg}"
-        lock = _topic_locks.setdefault(settings.TG_TOPIC_FOCUS, asyncio.Lock())
-        async with lock:
-            if photo is not None:
-                await tg.send_photo(
-                    chat_id=chat_id, photo=photo, caption=focus_msg,
-                    message_thread_id=settings.TG_TOPIC_FOCUS,
-                )
-            else:
-                await tg.send_message(
-                    chat_id=chat_id, text=focus_msg,
-                    message_thread_id=settings.TG_TOPIC_FOCUS,
-                )
-    except Exception:
-        logger.warning("[Focus重定向] 推送失败", exc_info=True)
