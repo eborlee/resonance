@@ -331,7 +331,7 @@ def _draw_chart(
 
     # 标题放到图底部；多图拼接后呈现在第一张和第二张子图之间
     if show_title:
-        fig.text(0.5, -0.02, title_str, ha="center", va="top", fontsize=24)
+        fig.text(0.5, 0.04, title_str, ha="center", va="center", fontsize=24)
 
     if title_color is None:
         title_color = "#ef5350" if "超买" in title_str else "#26a69a" if "超卖" in title_str else "#000000"
@@ -438,7 +438,7 @@ def _draw_chart(
             fontweight="bold",
             zorder=1,
         )
-    fig.subplots_adjust(bottom=0.02)
+    fig.subplots_adjust(bottom=0.09 if show_title else 0.02)
 
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=150, bbox_inches="tight", pad_inches=0.05)
