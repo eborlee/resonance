@@ -320,7 +320,7 @@ def _draw_chart(
         df,
         type="candle",
         style="classic",
-        title=f"\n{title_str}" if show_title else "",
+        title="",
         addplot=add_plots,
         figsize=(15, 6),
         returnfig=True,
@@ -329,7 +329,10 @@ def _draw_chart(
 
     ax = axes[0]
 
-    # 直接将 CJK 字体注入 suptitle Text 对象，绕过名称查找回落问题
+    # 标题放到图底部；多图拼接后呈现在第一张和第二张子图之间
+    if show_title:
+        fig.text(0.5, -0.02, title_str, ha="center", va="top", fontsize=24)
+
     if title_color is None:
         title_color = "#ef5350" if "超买" in title_str else "#26a69a" if "超卖" in title_str else "#000000"
     for txt in fig.texts:
@@ -338,21 +341,14 @@ def _draw_chart(
         txt.set_fontsize(24)
         txt.set_color(title_color)
 
-    # 副标题（老五推荐原因）：紧贴图表上方，主标题相应上移避免重叠
+    # 副标题（老五推荐原因）：紧贴图表上方
     if subtitle and show_title:
-        sub_lines = subtitle.count("\n") + 1
         sub_kwargs = {"fontproperties": _cjk_font_prop} if _cjk_font_prop is not None else {}
-        sub_size = 20
         ax.text(
             0.5, 1.01, subtitle, transform=ax.transAxes,
-            fontsize=sub_size, color=title_color, ha="center", va="bottom",
+            fontsize=20, color=title_color, ha="center", va="bottom",
             linespacing=1.3, **sub_kwargs,
         )
-        # 每行约占 sub_size*1.3pt；figsize 高 5in
-        shift = sub_lines * sub_size * 1.3 / 72 / 5
-        for txt in fig.texts:
-            x, y = txt.get_position()
-            txt.set_position((x, y + shift))
 
     # 图例（mplfinance returnfig 模式下需手动触发）
     handles, labels = [], []
