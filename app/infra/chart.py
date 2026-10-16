@@ -342,7 +342,7 @@ def _draw_chart(
     if subtitle and show_title:
         sub_lines = subtitle.count("\n") + 1
         sub_kwargs = {"fontproperties": _cjk_font_prop} if _cjk_font_prop is not None else {}
-        sub_size = 16
+        sub_size = 20
         ax.text(
             0.5, 1.01, subtitle, transform=ax.transAxes,
             fontsize=sub_size, color=title_color, ha="center", va="bottom",
