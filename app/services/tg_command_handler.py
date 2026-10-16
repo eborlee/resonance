@@ -441,8 +441,9 @@ def _handle_focus(state: AppState, symbols: list[str]) -> str:
         return f"🎯 当前重点关注（{len(focus)}个）:\n" + "\n".join(f"  {s}" for s in focus)
 
     state.set_focus_symbols(symbols)
+    state.clear_alt_plan()  # /focus 覆盖 /plan：避免标题残留旧的推荐原因
     return (
-        f"✅ 已设置 {len(symbols)} 个重点关注标的（持续有效直到下次覆盖）:\n"
+        f"✅ 已设置 {len(symbols)} 个重点关注标的（持续有效直到下次覆盖，已清空山寨推荐原因）:\n"
         + "\n".join(f"  {s}" for s in symbols)
     )
 
@@ -468,9 +469,12 @@ async def _handle_plan(state: AppState, url: str | None) -> str:
         logger.error("[山寨关注] 抓取失败", exc_info=True)
         return "❌ 抓取失败（网络错误或页面结构变化），详见日志"
 
+    # /plan 与 /focus 合一：重点关注列表同步覆盖为这批标的（补 USDT）
+    state.set_focus_symbols([f"{b}USDT" for b in plan])
     state.set_alt_plan(plan)
     return (
-        f"✅ 已设置 {len(plan)} 个山寨关注（持续有效直到下次 /plan 覆盖）:\n"
+        f"✅ 已设置 {len(plan)} 个山寨关注（持续有效直到下次 /plan 或 /focus 覆盖）\n"
+        f"🎯 重点关注列表已同步为这批标的\n"
         + _format_alt_plan(state)
     )
 
@@ -663,7 +667,8 @@ async def _process_update(update: dict, state: AppState, tg: TelegramClient, own
             reply = _handle_focus(state, symbols)
         else:  # /focus_clear
             state.clear_focus_symbols()
-            reply = "✅ 重点关注列表已清空"
+            state.clear_alt_plan()
+            reply = "✅ 重点关注列表已清空（山寨推荐原因一并清空）"
         try:
             await tg.send_message(chat_id=chat_id, text=reply)
         except Exception:

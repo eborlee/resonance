@@ -445,6 +445,10 @@ class AppState:
         self.alt_plan = {self._base_symbol(k): v for k, v in plan.items()}
         logger.info(f"[山寨关注] 已设置 {len(self.alt_plan)} 个标的")
 
+    def clear_alt_plan(self) -> None:
+        self.alt_plan.clear()
+        logger.info("[山寨关注] 已清空")
+
     def get_alt_plan(self, symbol: str) -> Optional[Tuple[str, str]]:
         return self.alt_plan.get(self._base_symbol(symbol))
 
