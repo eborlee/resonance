@@ -15,6 +15,7 @@ from ..infra.chart import set_analysis_enabled, is_analysis_enabled
 from ..services.market_briefing_service import set_briefing_enabled, is_briefing_enabled, MarketBriefingService
 from ..adapters.tg_client import TelegramClient
 from ..adapters.notion_plan import fetch_alt_plan, NotionPlanError
+from ..adapters.dashboard_client import push_oldfive_recommendations
 from ..infra.utils import ts_to_utc_str
 
 logger = logging.getLogger(__name__)
@@ -455,28 +456,30 @@ def _format_alt_plan(state: AppState) -> str:
     )
 
 
-async def _handle_plan(state: AppState, url: str | None) -> str:
+async def _handle_plan(state: AppState, url: str | None) -> tuple[str, dict | None]:
+    """返回 (TG 回复文本, 解析出的 plan)。plan 仅在成功设置时非 None，用于回复后归档到 dashboard。"""
     if not url:
         if not state.alt_plan:
-            return "📌 当前无山寨关注\n用法: /plan <老五 Notion 链接>"
-        return f"📌 当前山寨关注（{len(state.alt_plan)}个）:\n" + _format_alt_plan(state)
+            return "📌 当前无山寨关注\n用法: /plan <老五 Notion 链接>", None
+        return f"📌 当前山寨关注（{len(state.alt_plan)}个）:\n" + _format_alt_plan(state), None
 
     try:
         plan = await fetch_alt_plan(url)
     except NotionPlanError as e:
-        return f"❌ 解析失败: {e}"
+        return f"❌ 解析失败: {e}", None
     except Exception:
         logger.error("[山寨关注] 抓取失败", exc_info=True)
-        return "❌ 抓取失败（网络错误或页面结构变化），详见日志"
+        return "❌ 抓取失败（网络错误或页面结构变化），详见日志", None
 
     # /plan 与 /focus 合一：重点关注列表同步覆盖为这批标的（补 USDT）
     state.set_focus_symbols([f"{b}USDT" for b in plan])
     state.set_alt_plan(plan)
-    return (
+    reply = (
         f"✅ 已设置 {len(plan)} 个山寨关注（持续有效直到下次 /plan 或 /focus 覆盖）\n"
         f"🎯 重点关注列表已同步为这批标的\n"
         + _format_alt_plan(state)
     )
+    return reply, plan
 
 
 def _handle_universe() -> str:
@@ -651,11 +654,15 @@ async def _process_update(update: dict, state: AppState, tg: TelegramClient, own
     # /plan 单独处理（参数是 URL，不能被 _parse_command 转成大写）
     if text.strip().lower().split("@")[0].split()[0] == "/plan":
         parts = text.strip().split()
-        reply = await _handle_plan(state, parts[1] if len(parts) > 1 else None)
+        plan_url = parts[1] if len(parts) > 1 else None
+        reply, plan = await _handle_plan(state, plan_url)
         try:
             await tg.send_message(chat_id=chat_id, text=reply)
         except Exception:
             logger.error("命令回复发送失败", exc_info=True)
+        # TG 回复之后再归档到 dashboard：火忘，失败只记日志，不影响上面的回复
+        if plan:
+            asyncio.create_task(push_oldfive_recommendations(plan_url, plan))
         return
 
     # /focus 单独处理（支持多个 symbol 参数）

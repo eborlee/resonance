@@ -3,7 +3,8 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Dict, Optional, Tuple
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
@@ -88,4 +89,47 @@ async def push_signal(
         except Exception as e:
             logger.warning(f"[Dashboard] 图片归档异常 {symbol} {signal_id}: {e}")
 
+    return True
+
+
+def _oldfive_url(base_url: str) -> str:
+    """由 DASHBOARD_PUSH_URL（…/signals）推导 …/oldfive/recommendations。"""
+    u = urlsplit(base_url)
+    parent = u.path.rstrip("/").rsplit("/", 1)[0]
+    return urlunsplit((u.scheme, u.netloc, f"{parent}/oldfive/recommendations", "", ""))
+
+
+async def push_oldfive_recommendations(source_url: str, plan: Dict[str, Tuple[str, str]]) -> bool:
+    """
+    把 /plan 解析出的老五每日推荐推送到 dashboard。火忘模式：失败只记 warning，绝不抛异常。
+    plan: {symbol: (4H 一句话, 1H 一句话)}。DASHBOARD_PUSH_URL 未配置时静默跳过。
+    """
+    base = settings.DASHBOARD_PUSH_URL
+    if not base:
+        return False
+
+    payload = {
+        "source_url": source_url,
+        "items": [
+            {"symbol": sym, "reason_4h": r4 or "", "reason_1h": r1 or ""}
+            for sym, (r4, r1) in plan.items()
+        ],
+    }
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.post(
+                _oldfive_url(base),
+                json=payload,
+                headers={
+                    "X-Resonance-Token": settings.DASHBOARD_PUSH_TOKEN,
+                    "Content-Type": "application/json",
+                },
+            )
+            if r.status_code not in (200, 201):
+                logger.warning(f"[Dashboard] 老五推荐归档失败: HTTP {r.status_code} {r.text[:200]}")
+                return False
+            logger.info(f"[Dashboard] 老五推荐已归档 {len(plan)} 个标的: {r.text[:100]}")
+    except Exception as e:
+        logger.warning(f"[Dashboard] 老五推荐归档异常: {e}")
+        return False
     return True

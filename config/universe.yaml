@@ -1,5 +1,5 @@
 main_topic_symbols: [BTCUSDT, ETHUSDT, WTI, XAUUSD]
-us_stock_symbols: [AAPL, MSFT, NVDA, TSLA, GOOGL, META, AMZN, AMD, SPY, QQQ, ORCL]
+us_stock_symbols: [AAPL, MSFT, NVDA, TSLA, GOOGL, META, AMZN, AMD, SPY, QQQ, ORCL, NASDAQ]
 
 symbols:
   AAVEUSDT:

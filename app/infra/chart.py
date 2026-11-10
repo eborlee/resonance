@@ -74,6 +74,7 @@ _TV_TO_YFINANCE: dict[str, str] = {
     "WTI":    "CL=F",
     "XAUUSD": "GC=F",
     "SILVER": "SI=F",
+    "NASDAQ": "NQ=F",  # IG:NASDAQ 是近 24h 交易的纳指 100 CFD，用期货而非 ^NDX（仅现货时段）
 }
 
 # 外汇对常见计价货币：6位字母且后3位在此集合内 → 自动映射为 yfinance 的 "SYMBOL=X" 格式
@@ -153,13 +154,13 @@ def _compute_ema(prices: list[float], period: int) -> list[float]:
 def _yfinance_fetch_sync(symbol: str, interval: str, limit: int) -> Optional["pd.DataFrame"]:
     """
     同步版 yfinance 拉取，在 executor 中运行。
-    interval: "1h" / "4h"（由 1h resample 合成）/ "1D"。
+    interval: "1h" / "4h"（由 1h resample 合成）/ "1D" / "15m" / "5m"。
 
     days_needed 换算逻辑：
       - 1D：1根=1交易日，交易日≈日历天×5/7，所以 limit×(7/5) 个日历天
       - 1h：美股约每交易日6根1h，换算到交易日后再×(7/5)得日历天
       - 4h：先拉 limit×4 根 1h，再 resample，天数同 1h 逻辑
-      - 3m：yfinance 无此周期，降级拉 5m
+      - 15m / 5m：yfinance 只保留 60 天，按美股每交易日根数估算，上限 59 天
     """
     import yfinance as yf
     import pandas as pd
@@ -179,11 +180,12 @@ def _yfinance_fetch_sync(symbol: str, interval: str, limit: int) -> Optional["pd
         days_needed = min(limit // 26 + 5, 59)  # yfinance 15m 限60天，美股~26根/交易日
         yf_interval = "15m"
         resample_to = None
-    elif interval == "3m":
-        # yfinance 无 3m，降级用 5m；5m 同样限60天，美股~78根/交易日
-        days_needed = min(limit // 78 + 5, 59)
+    elif interval == "5m":
+        days_needed = min(limit // 78 + 5, 59)  # yfinance 5m 限60天，美股~78根/交易日
         yf_interval = "5m"
         resample_to = None
+    elif interval == "3m":
+        return None  # yfinance 不支持 3m（generate_chart 已改用 5m）
     else:  # 1h
         days_needed = min(math.ceil(limit / 6 * 7 / 5) + 30, 728)
         yf_interval = "1h"
@@ -527,13 +529,15 @@ async def generate_chart(
     if klines:
         df = _binance_to_df(klines)
     else:
-        logger.info(f"[Chart] Binance 无数据，尝试 yfinance: {symbol}/{max_iv}")
-        df = await _fetch_klines_yfinance(symbol, max_iv, fetch_limit)
-        # yfinance 无 3m，实际拉的是 5m，标注据实改写避免误导
-        if df is not None and max_iv == "3m":
+        # yfinance 没有 3m，改画 5m（标题与水印同步改成 5m）
+        yf_iv = max_iv
+        if max_iv == "3m":
+            yf_iv = "5m"
             label = "5M"
             if ylabel_text == "3m":
                 ylabel_text = "5m"
+        logger.info(f"[Chart] Binance 无数据，尝试 yfinance: {symbol}/{yf_iv}")
+        df = await _fetch_klines_yfinance(symbol, yf_iv, fetch_limit)
 
     if df is None:
         return None
