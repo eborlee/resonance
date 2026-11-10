@@ -76,6 +76,21 @@ _TV_TO_YFINANCE: dict[str, str] = {
     "SILVER": "SI=F",
 }
 
+# 外汇对常见计价货币：6位字母且后3位在此集合内 → 自动映射为 yfinance 的 "SYMBOL=X" 格式
+_FOREX_QUOTE_CURRENCIES: frozenset[str] = frozenset({
+    "USD", "EUR", "GBP", "JPY", "CHF", "CAD", "AUD", "NZD",
+    "HKD", "SGD", "CNH", "MXN", "ZAR", "SEK", "NOK", "DKK",
+})
+
+
+def _to_yfinance_symbol(symbol: str) -> str:
+    s = symbol.upper()
+    if s in _TV_TO_YFINANCE:
+        return _TV_TO_YFINANCE[s]
+    if len(s) == 6 and s.isalpha() and s[3:] in _FOREX_QUOTE_CURRENCIES:
+        return s + "=X"
+    return s
+
 # 项目内部 interval → Binance API interval（不一致时补充）
 _INTERNAL_TO_BINANCE_IV: dict[str, str] = {
     "1D": "1d",
@@ -144,12 +159,13 @@ def _yfinance_fetch_sync(symbol: str, interval: str, limit: int) -> Optional["pd
       - 1D：1根=1交易日，交易日≈日历天×5/7，所以 limit×(7/5) 个日历天
       - 1h：美股约每交易日6根1h，换算到交易日后再×(7/5)得日历天
       - 4h：先拉 limit×4 根 1h，再 resample，天数同 1h 逻辑
+      - 3m：yfinance 无此周期，降级拉 5m
     """
     import yfinance as yf
     import pandas as pd
     import datetime
 
-    yf_symbol = _TV_TO_YFINANCE.get(symbol.upper(), symbol.upper())
+    yf_symbol = _to_yfinance_symbol(symbol)
 
     if interval == "1D":
         days_needed = math.ceil(limit * 7 / 5) + 30
@@ -164,7 +180,10 @@ def _yfinance_fetch_sync(symbol: str, interval: str, limit: int) -> Optional["pd
         yf_interval = "15m"
         resample_to = None
     elif interval == "3m":
-        return None  # yfinance 不支持 3m
+        # yfinance 无 3m，降级用 5m；5m 同样限60天，美股~78根/交易日
+        days_needed = min(limit // 78 + 5, 59)
+        yf_interval = "5m"
+        resample_to = None
     else:  # 1h
         days_needed = min(math.ceil(limit / 6 * 7 / 5) + 30, 728)
         yf_interval = "1h"
@@ -510,6 +529,11 @@ async def generate_chart(
     else:
         logger.info(f"[Chart] Binance 无数据，尝试 yfinance: {symbol}/{max_iv}")
         df = await _fetch_klines_yfinance(symbol, max_iv, fetch_limit)
+        # yfinance 无 3m，实际拉的是 5m，标注据实改写避免误导
+        if df is not None and max_iv == "3m":
+            label = "5M"
+            if ylabel_text == "3m":
+                ylabel_text = "5m"
 
     if df is None:
         return None
