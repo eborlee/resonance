@@ -84,11 +84,39 @@ _FOREX_QUOTE_CURRENCIES: frozenset[str] = frozenset({
 })
 
 
+# 主流货币中文简称，用于标题显示（澳美/欧美/美日…）；非主流货币只加斜杠不加中文
+_CURRENCY_CN: dict[str, str] = {
+    "USD": "美", "EUR": "欧", "GBP": "镑", "JPY": "日",
+    "CHF": "瑞", "CAD": "加", "AUD": "澳", "NZD": "纽",
+    "CNH": "中",
+}
+
+
+def _is_forex_pair(symbol: str) -> bool:
+    s = symbol.upper()
+    return (
+        s not in _TV_TO_YFINANCE
+        and len(s) == 6
+        and s.isalpha()
+        and s[3:] in _FOREX_QUOTE_CURRENCIES
+    )
+
+
+def _forex_display(symbol: str) -> str:
+    """AUDUSD → "AUD/USD 澳美"。两边都是主流货币时才追加中文简称。"""
+    s = symbol.upper()
+    base, quote = s[:3], s[3:]
+    cn_base, cn_quote = _CURRENCY_CN.get(base), _CURRENCY_CN.get(quote)
+    if cn_base and cn_quote:
+        return f"{base}/{quote} {cn_base}{cn_quote}"
+    return f"{base}/{quote}"
+
+
 def _to_yfinance_symbol(symbol: str) -> str:
     s = symbol.upper()
     if s in _TV_TO_YFINANCE:
         return _TV_TO_YFINANCE[s]
-    if len(s) == 6 and s.isalpha() and s[3:] in _FOREX_QUOTE_CURRENCIES:
+    if _is_forex_pair(s):
         return s + "=X"
     return s
 
@@ -336,6 +364,9 @@ def _draw_chart(
         df = df.iloc[-display_n:]
 
     title_str = chart_title if chart_title else f"{symbol}  {interval_label}"
+    # 外汇改写需在去 USDT 之前：插入斜杠后串里不再含 "USDT"，顺带避开 USDTRY 被截断
+    if _is_forex_pair(symbol):
+        title_str = title_str.replace(symbol.upper(), _forex_display(symbol))
     title_str = title_str.replace("USDT", "").replace("usdt", "")
     fig, axes = mpf.plot(
         df,
